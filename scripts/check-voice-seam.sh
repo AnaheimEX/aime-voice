@@ -1,5 +1,5 @@
 #!/bin/sh
-# Confirm the branch-owned voice module and its input-method seam survived a merge.
+# Confirm the local voice module is still present after an upstream-only merge.
 set -eu
 cd "$(dirname "$0")/.."
 
