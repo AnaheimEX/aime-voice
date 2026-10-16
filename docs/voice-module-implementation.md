@@ -1,6 +1,6 @@
 # 本机定制当前进度
 
-更新日期：2026-10-16。当前本机预览已安装 **Build67**（0.1.7，CFBundleVersion 67）。三个组件均为 Build67，通用二进制为 x86_64 与 arm64，CLI 为 arm64。沿用原本机证书，三个 designated requirements 与替换前的 Build66 一致，完整包 `codesign --verify --deep --strict` 通过。主程序 PID 78798、设置 PID 80304、语音 XPC PID 78882 已从安装路径启动。输入源为 `app.zool.inputmethod.aime.voicepreview.hans`。最新完整产物为 `../dist/Build67/AIME Voice Preview.app`。Build66 产物、签名临时文件、`/tmp` 下旧的 aime 构建目录和安装回退包 `previous-build66.app` 已按授权删除。Xcode DerivedData 与 SwiftPM 缓存仍保留。用户模型、词典和 `voice-settings.json` 未修改。未做真人录音或跨应用验收。下方为本次结果与历史记录。
+更新日期：2026-10-16。本地 `main` 已把上游 0.1.9 合并进来，语音模块仍只在这条分支上。当前本机预览已安装 **Build67**（0.1.7，CFBundleVersion 67），安装包尚未按合并后的源码重编。三个组件均为 Build67，通用二进制为 x86_64 与 arm64，CLI 为 arm64。沿用原本机证书，三个 designated requirements 与替换前的 Build66 一致，完整包 `codesign --verify --deep --strict` 通过。主程序 PID 78798、设置 PID 80304、语音 XPC PID 78882 已从安装路径启动。输入源为 `app.zool.inputmethod.aime.voicepreview.hans`。最新完整产物为 `../dist/Build67/AIME Voice Preview.app`。Build66 产物、签名临时文件、`/tmp` 下旧的 aime 构建目录和安装回退包 `previous-build66.app` 已按授权删除。Xcode DerivedData 与 SwiftPM 缓存仍保留。用户模型、词典和 `voice-settings.json` 未修改。未做真人录音或跨应用验收。下方为本次结果与历史记录。
 
 ## 2026-10-16 推测润色与长触发词（Build67 已安装）
 
