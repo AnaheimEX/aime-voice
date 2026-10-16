@@ -22,9 +22,22 @@ public struct AIMEPaths: Sendable, Equatable {
             return AIMEPaths(userDataDir: URL(fileURLWithPath: (override as NSString).expandingTildeInPath, isDirectory: true))
         }
         let library = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library", isDirectory: true)
+        // Independent input-method processes cannot share LevelDB user dictionaries.
+        // Preview and its settings use one workspace; the production workspace stays separate.
+        // Console helpers and launchd input methods may not expose the wrapper ID
+        // through Bundle.main; read the enclosing application's public metadata.
+        let executable = Bundle.main.executableURL ?? URL(fileURLWithPath: CommandLine.arguments[0])
+        let application = executable.deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        let infoURL = application.appendingPathComponent("Contents/Info.plist")
+        let info = (try? Data(contentsOf: infoURL)).flatMap {
+            try? PropertyListSerialization.propertyList(from: $0, format: nil) as? [String: Any]
+        }
+        let identifier = info?["CFBundleIdentifier"] as? String ?? Bundle.main.bundleIdentifier
+        let preview = identifier?.contains(".voicepreview") == true
+        let name = preview ? "AIME Voice Preview" : "AIME"
         return AIMEPaths(
-            userDataDir: library.appendingPathComponent("AIME/Rime", isDirectory: true),
-            logDir: library.appendingPathComponent("Logs/AIME", isDirectory: true)
+            userDataDir: library.appendingPathComponent("\(name)/Rime", isDirectory: true),
+            logDir: library.appendingPathComponent("Logs/\(name)", isDirectory: true)
         )
     }
 

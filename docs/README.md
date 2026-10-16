@@ -9,6 +9,7 @@ AIME is an open-source Chinese input method for macOS, built on RIME, with local
 | 安装、启用与日常使用 / Install and use | [中文使用文档](https://aime.zool.app/docs/) · [English guide](https://aime.zool.app/en/docs/) |
 | 了解产品与迁移 / Product and migration | [中文 README](../README.md) · [English README](../README.en.md) |
 | 调整输入习惯 / Configure typing | [RIME 配置参考](rime-config-reference.md) |
+| 区分文字词库与语音词典 / Keyboard and voice dictionaries | [用途、机制与隔离边界](dictionary-isolation.md) |
 | 分享与自定义配色 / Themes | [主题说明](themes.md) |
 | 排障与导出诊断信息 / Troubleshooting | [排障指南](troubleshooting.md) |
 | 了解本地输入与 AI 边界 / Privacy and AI | [隐私说明](privacy.md) · [Security policy](../SECURITY.md) |
@@ -16,7 +17,9 @@ AIME is an open-source Chinese input method for macOS, built on RIME, with local
 | 贡献公共词库 / Contribute word lists | [aime-dicts](https://github.com/zoolapp/aime-dicts) |
 | 了解实现和取舍 / Architecture and decisions | [架构](architecture.md) · [决策记录](decisions/) |
 | 构建与发布 / Build and release | [发布流程](releasing.md) · [发布清单](release-checklist.md) |
-| 查看更新 / Changes | [CHANGELOG](../CHANGELOG.md) · [GitHub Releases](https://github.com/zoolapp/aime/releases) |
+| 本机定制当前进度 / Local customization | [当前进度与剩余工作](voice-module-implementation.md) · [模块契约](voice-module-design.md) · [本机更新合同](local-update-usage.md) |
+| 本机语音接入 / Local voice integrations | [Fish 原生 STT](fish-native-asr.md) · [Laya 本地决策与评估](laya-local-decision.md) · [FluidVoice 接入评估](fluidvoice-integration-assessment-2026-10-15.md) · [本机架构决定](adr/) |
+| 查看上游更新 / Upstream changes | [CHANGELOG](../CHANGELOG.md) · [GitHub Releases](https://github.com/zoolapp/aime/releases) |
 | 核对源码与分发许可 / Source and distribution licenses | [原创代码 MIT](../LICENSE) · [第三方声明](../THIRD_PARTY_NOTICES.md) · [插件许可审查](native-plugin-license-audit.md) · [分发验证记录](license-packaging-verification.md) |
 
 原创源码的 MIT 许可不代表安装包仅适用 MIT；安装包包含 GPL-3.0 组件，请同时阅读第三方说明。问题反馈使用虚构输入，不上传个人词频、完整输入记录或凭据。

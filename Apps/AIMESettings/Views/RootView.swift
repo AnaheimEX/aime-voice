@@ -1,7 +1,8 @@
+import AIMEVoiceSettings
 import SwiftUI
 
 enum Pane: String, CaseIterable, Identifiable, Hashable {
-    case overview, schemas, general, switching, spelling, keys, appearance, apps, dictionaries, phrases, snippets, sync, stats, ai, advanced, about
+    case overview, schemas, general, switching, spelling, keys, appearance, apps, dictionaries, phrases, snippets, sync, stats, ai, voice, advanced, about
 
     var id: String { rawValue }
 
@@ -15,12 +16,13 @@ enum Pane: String, CaseIterable, Identifiable, Hashable {
         case .keys: "快捷键"
         case .appearance: "外观"
         case .apps: "应用"
-        case .dictionaries: "词库"
+        case .dictionaries: "文字词库"
         case .phrases: "自定义短语"
         case .snippets: "常用语"
         case .sync: "同步与备份"
         case .stats: "输入统计"
         case .ai: "AI 助手"
+        case .voice: "语音输入"
         case .advanced: "高级"
         case .about: "关于"
         }
@@ -42,6 +44,7 @@ enum Pane: String, CaseIterable, Identifiable, Hashable {
         case .sync: "arrow.triangle.2.circlepath"
         case .stats: "chart.bar.xaxis"
         case .ai: "wand.and.sparkles"
+        case .voice: "mic"
         case .advanced: "wrench.and.screwdriver"
         case .about: "info.circle"
         }
@@ -60,10 +63,10 @@ enum Pane: String, CaseIterable, Identifiable, Hashable {
 
     @MainActor static let sections: [(LocalizedStringKey, [Pane])] = [
         ("", [.overview]),
-        ("智能", [.ai, .stats]),
+        ("智能", [.ai, .voice, .stats]),
         ("输入", [.schemas, .general, .switching, .spelling, .keys]),
         ("个性化", [.appearance, .apps]),
-        ("词库", [.dictionaries, .phrases, .snippets, .sync]),
+        ("文字输入", [.dictionaries, .phrases, .snippets, .sync]),
         ("系统", [.advanced, .about]),
     ]
 }
@@ -145,6 +148,9 @@ struct RootView: View {
         case .sync: SyncView()
         case .stats: UsageStatsView()
         case .ai: AIAssistantView()
+        case .voice: VoiceSettingsPane(style: VoiceSettingsStyle(
+                accent: Theme.accent, canvas: Theme.canvas, card: Theme.card,
+                cardBorder: Theme.cardBorder, warning: Theme.warning, success: Theme.success))
         case .advanced: AdvancedView()
         case .about: AboutView()
         default: CatalogPane(pane: pane)

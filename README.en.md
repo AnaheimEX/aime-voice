@@ -60,7 +60,7 @@ If you want to keep full or double pinyin and your own word lists while editing 
 - **Draft layer (optional)** — typed text waits at the cursor until Return, so a whole sentence can be polished before it is sent.
 - **Visual settings** — 80+ options covering everyday RIME configuration: candidates, Chinese/English switching, fuzzy pinyin, shortcuts, Traditional output, per-app defaults ([research notes](docs/rime-config-reference.md)).
 - **Appearance** — colour scheme gallery with live preview, fonts, horizontal or vertical layout, radii and spacing, custom schemes with contrast warnings.
-- **Vocabulary** — an official online catalogue (versioned, SHA-256 verified, daily or weekly updates), any RIME-compatible word list, and one-click schema packages (rime-ice, Wanxiang, rime-frost) with conflict warnings.
+- **Keyboard vocabulary** — codes, candidates and learned frequencies for typing, with an official online catalogue (versioned, SHA-256 verified, daily or weekly updates), RIME-compatible word lists, and one-click schema packages (rime-ice, Wanxiang, rime-frost) with conflict warnings. The local voice feature maintains its own recognition hints and correction rules; neither feature imports from or writes back to the other. See [dictionary boundaries](docs/dictionary-isolation.md).
 - **Sentence scoring (optional)** — download the approximately 405 MB Wanxiang offline language model from Vocabulary, then enable it in typing settings. Disabled by default; scoring stays on the Mac.
 - **Snippets and phrases** — categorised snippets (phone, email, address…) and a table editor for custom phrases.
 - **Input statistics (optional, local only)** — daily characters, hours and apps, frequent words you can pin.

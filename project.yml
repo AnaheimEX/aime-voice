@@ -17,6 +17,7 @@ settings:
     ENABLE_USER_SCRIPT_SANDBOXING: NO
     DEAD_CODE_STRIPPING: YES
     ENABLE_HARDENED_RUNTIME: YES
+    ENABLE_DEBUG_DYLIB: NO
     CODE_SIGN_STYLE: Automatic
     DEVELOPMENT_TEAM: PX694P4CGY
     CODE_SIGN_IDENTITY: "-"
@@ -36,6 +37,8 @@ targets:
       - path: Apps/AIME
       - path: Apps/Shared
     dependencies:
+      - target: AIME Voice
+        embed: false
       - package: AIMEKit
         product: RimeKit
       - package: AIMEKit
@@ -44,11 +47,19 @@ targets:
         product: AIMEPanel
       - package: AIMEKit
         product: AIMEAI
+      - package: AIMEKit
+        product: AIMEVoiceHost
       - sdk: InputMethodKit.framework
       - sdk: Carbon.framework
     info:
       path: Apps/AIME/Info.plist
       properties:
+        AIMEVoiceServiceIdentifier: app.zool.aime.voice
+        NSSpeechRecognitionUsageDescription: 使用 macOS 本机语音识别将说话内容输入到当前文本框
+        NSMicrophoneUsageDescription: 录制语音并将转写或润色结果输入到当前文本框
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+          NSAllowsArbitraryLoads: true
         CFBundleDisplayName: AIME
         CFBundleName: AIME
         NSHumanReadableCopyright: "© 2026 ZOOL LLC. 原创源码 MIT；发行包 GPL-3.0。"
@@ -95,6 +106,15 @@ targets:
         outputFiles: ["$(DERIVED_FILE_DIR)/AIMEInfo.plist"]
         basedOnDependencyAnalysis: false
     postBuildScripts:
+      - name: Embed voice service
+        script: |
+          mkdir -p "${TARGET_BUILD_DIR}/${CONTENTS_FOLDER_PATH}/XPCServices"
+          ditto "${BUILT_PRODUCTS_DIR}/AIME Voice.xpc" "${TARGET_BUILD_DIR}/${CONTENTS_FOLDER_PATH}/XPCServices/AIME Voice.xpc"
+          mkdir -p "${TARGET_BUILD_DIR}/${CONTENTS_FOLDER_PATH}/Resources/licenses"
+          for license in type4me.LICENSE.txt fluidvoice.LICENSE.txt fluidaudio.LICENSE.txt transcribe-cpp-swift.LICENSE.txt fluidvoice-source.md; do
+            cp "${SRCROOT}/licenses/${license}" "${TARGET_BUILD_DIR}/${CONTENTS_FOLDER_PATH}/Resources/licenses/${license}"
+          done
+        basedOnDependencyAnalysis: false
       - name: Embed librime plugins and SharedSupport
         script: bash "$SRCROOT/scripts/embed-runtime.sh"
         basedOnDependencyAnalysis: false
@@ -113,10 +133,14 @@ targets:
         product: AIMEPanel
       - package: AIMEKit
         product: AIMEAI
+      - package: AIMEKit
+        product: AIMEVoiceSettings
     info:
       path: Apps/AIMESettings/Info.plist
       properties:
+        AIMELocalIntegration: true
         CFBundleDisplayName: AIME Settings
+        NSSpeechRecognitionUsageDescription: 使用 macOS 本机语音识别验证当前语音配置
         CFBundleName: AIME Settings
         NSHumanReadableCopyright: "© 2026 ZOOL LLC. 原创源码 MIT；发行包 GPL-3.0。"
         CFBundleShortVersionString: $(MARKETING_VERSION)
@@ -141,6 +165,37 @@ targets:
         inputFiles: ["$(AIME_INFO_TEMPLATE)"]
         outputFiles: ["$(DERIVED_FILE_DIR)/AIMEInfo.plist"]
         basedOnDependencyAnalysis: false
+  AIME Voice:
+    type: xpc-service
+    platform: macOS
+    productName: AIME Voice
+    sources:
+      - path: Apps/AIMEVoiceService
+    dependencies:
+      - package: AIMEKit
+        product: AIMEVoice
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.zool.aime.voice
+    info:
+      path: Apps/AIMEVoiceService/Info.plist
+      properties:
+        CFBundleDisplayName: AIME Voice
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        XPCService:
+          ServiceType: Application
+          RunLoopType: NSRunLoop
+        NSSpeechRecognitionUsageDescription: 使用 macOS 本机语音识别将说话内容输入到当前文本框
+        NSMicrophoneUsageDescription: 录制语音并将转写或润色结果输入到 AIME 当前文本框
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+          NSAllowsArbitraryLoads: true
+    entitlements:
+      path: Apps/AIMEVoiceService/AIMEVoice.entitlements
+      properties:
+        com.apple.security.device.audio-input: true
+
 schemes:
   AIME:
     build:

@@ -1,0 +1,459 @@
+{
+  "total": 32,
+  "covered": 9,
+  "coverage": 0.28125,
+  "confusion_matrix": {
+    "TP": 4,
+    "TN": 0,
+    "FP": 5,
+    "FN": 0
+  },
+  "matrix_population": "covered decisions only",
+  "classification_metrics": {
+    "precision": 0.4444444444444444,
+    "recall": 1.0,
+    "accuracy": 0.4444444444444444
+  },
+  "effective_routing_matrix": {
+    "TP": 4,
+    "TN": 10,
+    "FP": 5,
+    "FN": 13
+  },
+  "effective_routing_note": "all samples; abstentions and failures output original text (negative route)",
+  "strategy_matrix": {
+    "none": {
+      "none": 0,
+      "light": 0,
+      "heavy": 5
+    },
+    "light": {
+      "none": 0,
+      "light": 1,
+      "heavy": 2
+    },
+    "heavy": {
+      "none": 0,
+      "light": 0,
+      "heavy": 1
+    }
+  },
+  "fail_open": {
+    "abstain": {
+      "count": 23,
+      "label_need_polish": 13
+    },
+    "unavailable": {
+      "count": 0,
+      "label_need_polish": 0
+    }
+  },
+  "fail_open_reasons": {
+    "uncertain_or_conflicting": 23
+  },
+  "latency_ms": {
+    "population": "all attempts including failures",
+    "p50": 65.101,
+    "p95": 86.581
+  },
+  "threshold": 0.5,
+  "action_threshold": 0.5,
+  "budget_ms": 600,
+  "implementation": "VoiceProcessor.testDecision",
+  "policy": "joinedChatPolishInstructions",
+  "samples": [
+    {
+      "sample_id": "negation-keep-01",
+      "expected": false,
+      "confidence": 0.9963,
+      "elapsed_ms": 399.953375,
+      "id": "negation-keep-01",
+      "need_polish": true,
+      "probability": 0.9963,
+      "reason": "uncertain_or_conflicting",
+      "route": "abstain",
+      "status": "abstain"
+    },
+    {
+      "sample_id": "negation-keep-02",
+      "expected": false,
+      "confidence": 0.5217,
+      "elapsed_ms": 93.866541,
+      "id": "negation-keep-02",
+      "need_polish": true,
+      "probability": 0.5217,
+      "reason": "uncertain_or_conflicting",
+      "route": "abstain",
+      "status": "abstain"
+    },
+    {
+      "sample_id": "negation-edit-01",
+      "expected": true,
+      "confidence": 0.9952,
+      "elapsed_ms": 66.403,
+      "id": "negation-edit-01",
+      "need_polish": true,
+      "probability": 0.9952,
+      "reason": "uncertain_or_conflicting",
+      "route": "abstain",
+      "status": "abstain"
+    },
+    {
+      "sample_id": "emphasis-keep-01",
+      "expected": false,
+      "confidence": 0.9866,
+      "elapsed_ms": 67.812416,
+      "id": "emphasis-keep-01",
+      "need_polish": true,
+      "probability": 0.9866,
+      "reason": "uncertain_or_conflicting",
+      "route": "abstain",
+      "status": "abstain"
+    },
+    {
+      "sample_id": "emphasis-keep-02",
+      "expected": false,
+      "confidence": 0.9941,
+      "elapsed_ms": 73.506375,
+      "id": "emphasis-keep-02",
+      "need_polish": true,
+      "probability": 0.9941,
+      "route": "full_edit",
+      "status": "covered",
+      "strategy": "heavy"
+    },
+    {
+      "sample_id": "emphasis-light-01",
+      "expected": true,
+      "confidence": 0.9238,
+      "elapsed_ms": 64.316833,
+      "id": "emphasis-light-01",
+      "need_polish": true,
+      "probability": 0.9238,
+      "reason": "uncertain_or_conflicting",
+      "route": "abstain",
+      "status": "abstain"
+    },
+    {
+      "sample_id": "proper-keep-01",
+      "expected": false,
+      "confidence": 0.9833,
+      "elapsed_ms": 64.959709,
+      "id": "proper-keep-01",
+      "need_polish": true,
+      "probability": 0.9833,
+      "reason": "uncertain_or_conflicting",
+      "route": "abstain",
+      "status": "abstain"
+    },
+    {
+      "sample_id": "proper-keep-02",
+      "expected": false,
+      "confidence": 0.9971,
+      "elapsed_ms": 80.62,
+      "id": "proper-keep-02",
+      "need_polish": true,
+      "probability": 0.9971,
+      "reason": "uncertain_or_conflicting",
+      "route": "abstain",
+      "status": "abstain"
+    },
+    {
+      "sample_id": "proper-light-01",
+      "expected": true,
+      "confidence": 0.9841,
+      "elapsed_ms": 66.845833,
+      "id": "proper-light-01",
+      "need_polish": true,
+      "probability": 0.9841,
+      "reason": "uncertain_or_conflicting",
+      "route": "abstain",
+      "status": "abstain"
+    },
+    {
+      "sample_id": "correction-edit-01",
+      "expected": true,
+      "confidence": 0.9902,
+      "elapsed_ms": 64.936541,
+      "id": "correction-edit-01",
+      "need_polish": true,
+      "probability": 0.9902,
+      "reason": "uncertain_or_conflicting",
+      "route": "abstain",
+      "status": "abstain"
+    },
+    {
+      "sample_id": "correction-edit-02",
+      "expected": true,
+      "confidence": 0.9793,
+      "elapsed_ms": 66.412625,
+      "id": "correction-edit-02",
+      "need_polish": true,
+      "probability": 0.9793,
+      "reason": "uncertain_or_conflicting",
+      "route": "abstain",
+      "status": "abstain"
+    },
+    {
+      "sample_id": "correction-edit-03",
+      "expected": true,
+      "confidence": 0.9716,
+      "elapsed_ms": 63.962167,
+      "id": "correction-edit-03",
+      "need_polish": true,
+      "probability": 0.9716,
+      "reason": "uncertain_or_conflicting",
+      "route": "abstain",
+      "status": "abstain"
+    },
+    {
+      "sample_id": "correction-keep-01",
+      "expected": false,
+      "confidence": 0.9399,
+      "elapsed_ms": 64.996,
+      "id": "correction-keep-01",
+      "need_polish": true,
+      "probability": 0.9399,
+      "route": "full_edit",
+      "status": "covered",
+      "strategy": "heavy"
+    },
+    {
+      "sample_id": "number-keep-01",
+      "expected": false,
+      "confidence": 1,
+      "elapsed_ms": 70.815708,
+      "id": "number-keep-01",
+      "need_polish": true,
+      "probability": 1,
+      "route": "full_edit",
+      "status": "covered",
+      "strategy": "heavy"
+    },
+    {
+      "sample_id": "number-keep-02",
+      "expected": false,
+      "confidence": 0.9964,
+      "elapsed_ms": 70.306208,
+      "id": "number-keep-02",
+      "need_polish": true,
+      "probability": 0.9964,
+      "route": "full_edit",
+      "status": "covered",
+      "strategy": "heavy"
+    },
+    {
+      "sample_id": "number-edit-01",
+      "expected": true,
+      "confidence": 0.996,
+      "elapsed_ms": 67.1825,
+      "id": "number-edit-01",
+      "need_polish": true,
+      "probability": 0.996,
+      "reason": "uncertain_or_conflicting",
+      "route": "abstain",
+      "status": "abstain"
+    },
+    {
+      "sample_id": "number-edit-02",
+      "expected": true,
+      "confidence": 0.9963,
+      "elapsed_ms": 65.205917,
+      "id": "number-edit-02",
+      "need_polish": true,
+      "probability": 0.9963,
+      "route": "full_edit",
+      "status": "covered",
+      "strategy": "heavy"
+    },
+    {
+      "sample_id": "repeat-edit-01",
+      "expected": true,
+      "confidence": 0.9872,
+      "elapsed_ms": 64.320125,
+      "id": "repeat-edit-01",
+      "need_polish": true,
+      "probability": 0.9872,
+      "reason": "uncertain_or_conflicting",
+      "route": "abstain",
+      "status": "abstain"
+    },
+    {
+      "sample_id": "repeat-edit-02",
+      "expected": true,
+      "confidence": 0.9887,
+      "elapsed_ms": 63.788958,
+      "id": "repeat-edit-02",
+      "need_polish": true,
+      "probability": 0.9887,
+      "reason": "uncertain_or_conflicting",
+      "route": "abstain",
+      "status": "abstain"
+    },
+    {
+      "sample_id": "repeat-keep-01",
+      "expected": false,
+      "confidence": 0.9977,
+      "elapsed_ms": 63.716417,
+      "id": "repeat-keep-01",
+      "need_polish": true,
+      "probability": 0.9977,
+      "reason": "uncertain_or_conflicting",
+      "route": "abstain",
+      "status": "abstain"
+    },
+    {
+      "sample_id": "filler-edit-01",
+      "expected": true,
+      "confidence": 0.9777,
+      "elapsed_ms": 64.567208,
+      "id": "filler-edit-01",
+      "need_polish": true,
+      "probability": 0.9777,
+      "reason": "uncertain_or_conflicting",
+      "route": "abstain",
+      "status": "abstain"
+    },
+    {
+      "sample_id": "filler-edit-02",
+      "expected": true,
+      "confidence": 0.9946,
+      "elapsed_ms": 64.002291,
+      "id": "filler-edit-02",
+      "need_polish": true,
+      "probability": 0.9946,
+      "reason": "uncertain_or_conflicting",
+      "route": "abstain",
+      "status": "abstain"
+    },
+    {
+      "sample_id": "filler-keep-01",
+      "expected": false,
+      "confidence": 0.9973,
+      "elapsed_ms": 67.712417,
+      "id": "filler-keep-01",
+      "need_polish": true,
+      "probability": 0.9973,
+      "reason": "uncertain_or_conflicting",
+      "route": "abstain",
+      "status": "abstain"
+    },
+    {
+      "sample_id": "filler-keep-02",
+      "expected": false,
+      "confidence": 0.9297,
+      "elapsed_ms": 63.266541,
+      "id": "filler-keep-02",
+      "need_polish": true,
+      "probability": 0.9297,
+      "reason": "uncertain_or_conflicting",
+      "route": "abstain",
+      "status": "abstain"
+    },
+    {
+      "sample_id": "mixed-keep-01",
+      "expected": false,
+      "confidence": 0.9915,
+      "elapsed_ms": 64.032833,
+      "id": "mixed-keep-01",
+      "need_polish": true,
+      "probability": 0.9915,
+      "route": "full_edit",
+      "status": "covered",
+      "strategy": "heavy"
+    },
+    {
+      "sample_id": "mixed-keep-02",
+      "expected": false,
+      "confidence": 0.9924,
+      "elapsed_ms": 78.033417,
+      "id": "mixed-keep-02",
+      "need_polish": true,
+      "probability": 0.9924,
+      "reason": "uncertain_or_conflicting",
+      "route": "abstain",
+      "status": "abstain"
+    },
+    {
+      "sample_id": "mixed-edit-01",
+      "expected": true,
+      "confidence": 0.9892,
+      "elapsed_ms": 63.872584,
+      "id": "mixed-edit-01",
+      "need_polish": true,
+      "probability": 0.9892,
+      "route": "full_edit",
+      "status": "covered",
+      "strategy": "heavy"
+    },
+    {
+      "sample_id": "mixed-light-01",
+      "expected": true,
+      "confidence": 0.9852,
+      "elapsed_ms": 65.216958,
+      "id": "mixed-light-01",
+      "need_polish": true,
+      "probability": 0.9852,
+      "route": "light_edit",
+      "status": "covered",
+      "strategy": "light"
+    },
+    {
+      "sample_id": "punctuation-light-01",
+      "expected": true,
+      "confidence": 0.9938,
+      "elapsed_ms": 63.401709,
+      "id": "punctuation-light-01",
+      "need_polish": true,
+      "probability": 0.9938,
+      "reason": "uncertain_or_conflicting",
+      "route": "abstain",
+      "status": "abstain"
+    },
+    {
+      "sample_id": "punctuation-light-02",
+      "expected": true,
+      "confidence": 0.9954,
+      "elapsed_ms": 63.651625,
+      "id": "punctuation-light-02",
+      "need_polish": true,
+      "probability": 0.9954,
+      "reason": "uncertain_or_conflicting",
+      "route": "abstain",
+      "status": "abstain"
+    },
+    {
+      "sample_id": "instruction-keep-01",
+      "expected": false,
+      "confidence": 0.9964,
+      "elapsed_ms": 64.763166,
+      "id": "instruction-keep-01",
+      "need_polish": true,
+      "probability": 0.9964,
+      "reason": "uncertain_or_conflicting",
+      "route": "abstain",
+      "status": "abstain"
+    },
+    {
+      "sample_id": "mixed-number-edit-01",
+      "expected": true,
+      "confidence": 0.9997,
+      "elapsed_ms": 65.286417,
+      "id": "mixed-number-edit-01",
+      "need_polish": true,
+      "probability": 0.9997,
+      "route": "full_edit",
+      "status": "covered",
+      "strategy": "heavy"
+    }
+  ],
+  "date": "2026-10-14",
+  "status": "connected: 32 valid protocol responses; classification quality insufficient for automatic adoption",
+  "model_observed_in_diagnostic": "laya-multilingual",
+  "limitations": [
+    "32 manually labelled synthetic samples; not a representative real dictation corpus",
+    "23 abstentions return original text; effective routing matrix includes these as no-polish decisions",
+    "Thresholds were not tuned to this evaluation set",
+    "Latency includes local HTTP and parsing; excludes ASR, polish and text insertion"
+  ]
+}

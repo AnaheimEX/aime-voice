@@ -66,6 +66,7 @@ sign() {
 for lib in "$APP"/Contents/Frameworks/librime.1.dylib "$APP"/Contents/Frameworks/rime-plugins/*.dylib; do sign "$lib"; done
 sign "$APP/Contents/Helpers/AIMEKit_AIMECore.bundle"
 sign --entitlements Apps/AIME/AIME.entitlements "$APP/Contents/Helpers/aime"
+sign --entitlements Apps/AIMEVoiceService/AIMEVoice.entitlements "$APP/Contents/XPCServices/AIME Voice.xpc"
 sign --entitlements Apps/AIMESettings/AIMESettings.entitlements "$APP/Contents/Applications/AIME Settings.app"
 sign --entitlements Apps/AIME/AIME.entitlements "$APP"
 codesign --verify --deep --strict "$APP"

@@ -51,7 +51,9 @@ def embed(source_root, app):
     actual_names = {path.name for path in plugins.iterdir()}
     if actual_names != expected_names:
         raise ValueError("bundled plugin directory differs from audited inventory")
-    for path in ["LICENSE", "THIRD_PARTY_NOTICES.md", inventory_path,
+    for path in ["LICENSE", "THIRD_PARTY_NOTICES.md", "licenses/type4me.LICENSE.txt", inventory_path,
+                 "licenses/fluidvoice.LICENSE.txt", "licenses/fluidaudio.LICENSE.txt",
+                 "licenses/transcribe-cpp-swift.LICENSE.txt", "licenses/fluidvoice-source.md",
                  "docs/native-plugin-license-audit.md", "docs/release-checklist.md"]:
         payload[path] = (source_root / path).read_bytes()
     payload["README.txt"] = (

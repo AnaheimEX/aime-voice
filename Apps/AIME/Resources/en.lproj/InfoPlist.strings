@@ -1,4 +1,6 @@
 "app.zool.inputmethod.aime.hans" = "AIME";
 "app.zool.inputmethod.aime" = "AIME";
+"app.zool.inputmethod.aime.voicepreview.hans" = "AIME";
+"app.zool.inputmethod.aime.voicepreview" = "AIME";
 CFBundleName = "AIME";
 CFBundleDisplayName = "AIME";

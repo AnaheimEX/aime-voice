@@ -49,14 +49,21 @@ struct SubscriptionTests {
         try "氛围编程\n".write(to: source, atomically: true, encoding: .utf8)
         let manager = SubscriptionManager(paths: paths)
         try await manager.add(url: source.absoluteString, name: nil)
+        let layers = ConfigLayers(paths: paths)
+        try layers.setGenerated(.schema("rime_ice"), keypath: "translator/user_dict", value: "personal_learning")
+        let personalDictionary = paths.userDataDir.appendingPathComponent("personal.dict.yaml")
+        let original = "---\nname: personal\nsort: original\n...\n自定义\tzi ding yi\t999\n"
+        try original.write(to: personalDictionary, atomically: true, encoding: .utf8)
         let count = try manager.rebuild(schemas: ["rime_ice", "double_pinyin_flypy"])
         #expect(count == 3)
+        #expect(layers.generatedValue(.schema("rime_ice"), keypath: "translator/user_dict") == "personal_learning")
+        // The original dictionary, including its sort order, belongs to the user.
+        #expect(try String(contentsOf: personalDictionary, encoding: .utf8) == original)
         let full = try String(contentsOf: paths.userDataDir.appendingPathComponent("aime_online.txt"), encoding: .utf8)
         let flypy = try String(contentsOf: paths.userDataDir.appendingPathComponent("aime_online_flypy.txt"), encoding: .utf8)
         #expect(full.contains("智能体\tzhinengti") && full.contains("DeepSeek\tdeepseek"))
         #expect(flypy.contains("智能体\tvingti") && flypy.contains("氛围编程\tffwwbmig"))
-        let layers = ConfigLayers(paths: paths)
-        #expect(layers.generatedValue(.schema("double_pinyin_flypy"), keypath: "aime_online")?["user_dict"] == "aime_online_flypy")
+        #expect(layers.generatedValue(.schema("double_pinyin_flypy"), keypath: "aime_online")?["user_dict"] == "aime_online_flypy_dynamic")
         #expect(layers.generatedValue(.schema("rime_ice"), keypath: "engine/translators/+") == ["table_translator@aime_online"])
     }
 
@@ -75,7 +82,7 @@ struct SubscriptionTests {
         #expect(full.components(separatedBy: "智能体\tzhinengti").count == 2) // one row, bundled weight kept
         #expect(full.contains("智能体\tzhinengti\t95"))
         // librime skips a table translator whose user dict is disabled.
-        #expect(ConfigLayers(paths: paths).generatedValue(.schema("rime_ice"), keypath: "aime_online")?["enable_user_dict"] == nil)
+        #expect(ConfigLayers(paths: paths).generatedValue(.schema("rime_ice"), keypath: "aime_online")?["enable_user_dict"] == true) // Keep the existing learnable vocabulary enabled.
     }
 
     @Test func mountsOnlyPinyinSchemasAndRemountsDeletedLayers() throws {
