@@ -11,6 +11,9 @@ public struct AIMEFeatures: Sendable, Codable, Equatable {
     public var aiProvider = "apple"
     public var aiBaseURL = "https://api.openai.com/v1"
     public var aiModel = "gpt-5-mini"
+    /// Extra JSON object merged into every request body (`model`, `messages`
+    /// and `stream` stay under program control). Empty means no extra fields.
+    public var aiExtraJSON = ""
     /// Explicit consent to send the selected text to `aiBaseURL` when polishing.
     public var aiRemoteAllowed = false
     /// Small AIME button at the end of the candidate window (opens the quick menu).
@@ -28,6 +31,9 @@ public struct AIMEFeatures: Sendable, Codable, Equatable {
     /// Output Traditional Chinese by default (librime's `traditionalization` switch,
     /// applied to every new session; ⌃⇧4 still toggles it for the moment).
     public var traditional = false
+    /// English punctuation by default (librime's `ascii_punct` switch). The state is
+    /// shared by all apps: ⌃⇧3 in one app switches the others too (#10).
+    public var asciiPunct = false
 
     public struct AIAction: Sendable, Codable, Equatable, Identifiable {
         public var id: UUID
@@ -51,6 +57,7 @@ public struct AIMEFeatures: Sendable, Codable, Equatable {
         aiProvider = try container.decodeIfPresent(String.self, forKey: .aiProvider) ?? defaults.aiProvider
         aiBaseURL = try container.decodeIfPresent(String.self, forKey: .aiBaseURL) ?? defaults.aiBaseURL
         aiModel = try container.decodeIfPresent(String.self, forKey: .aiModel) ?? defaults.aiModel
+        aiExtraJSON = try container.decodeIfPresent(String.self, forKey: .aiExtraJSON) ?? defaults.aiExtraJSON
         aiRemoteAllowed = try container.decodeIfPresent(Bool.self, forKey: .aiRemoteAllowed) ?? defaults.aiRemoteAllowed
         panelMenuButton = try container.decodeIfPresent(Bool.self, forKey: .panelMenuButton) ?? defaults.panelMenuButton
         menuHoldKey = try container.decodeIfPresent(ModifierHold.Key.self, forKey: .menuHoldKey) ?? defaults.menuHoldKey
@@ -58,6 +65,7 @@ public struct AIMEFeatures: Sendable, Codable, Equatable {
         draftLayer = try container.decodeIfPresent(Bool.self, forKey: .draftLayer) ?? defaults.draftLayer
         draftAutoCommit = try container.decodeIfPresent(Int.self, forKey: .draftAutoCommit) ?? defaults.draftAutoCommit
         traditional = try container.decodeIfPresent(Bool.self, forKey: .traditional) ?? defaults.traditional
+        asciiPunct = try container.decodeIfPresent(Bool.self, forKey: .asciiPunct) ?? defaults.asciiPunct
     }
 
     public static let changedNotification = Notification.Name("app.zool.aime.features")

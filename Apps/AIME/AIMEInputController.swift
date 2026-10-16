@@ -14,6 +14,8 @@ final class AIMEInputController: IMKInputController {
     private(set) var session: RimeSession?
     private var sessionGeneration = -1
     private var lastModifiers: NSEvent.ModifierFlags = []
+    /// Unmasked flags of the last modifier event: device bits tell ⌥ left from right.
+    private var lastDeviceFlags: UInt = 0
     private var appOptions = InputEngine.AppOptions()
     private var bundleID: String?
     private var hasMarkedText = false
@@ -25,11 +27,10 @@ final class AIMEInputController: IMKInputController {
     var quickMenu: QuickMenu?
     /// Holding one modifier on its own opens the quick menu (keyboard-only entry).
     var menuHold = ModifierHold()
+    /// Caps Lock presses that macOS spends on switching to and from ABC.
+    private var capsSwitch = CapsLockSourceSwitch()
     /// 输入图层: committed text waiting at the cursor (underlined) until it is confirmed.
     var draft = DraftBuffer()
-    /// Read only on an explicit paste; tests can supply synthetic text without the
-    /// user's pasteboard. No clipboard polling or text logging.
-    var clipboardText: () -> String? = { NSPasteboard.general.string(forType: .string) }
     /// What was just inserted into this field, so AI actions can work on "what I just
     /// typed" without a selection. Memory only; verified against the app before use.
     var recentText = RecentText()
@@ -54,6 +55,7 @@ final class AIMEInputController: IMKInputController {
         sessionGeneration = engine.generation
         applyAppOptions(newSession: true)
         applyScriptOption()
+        applyPunctOption()
         return session
     }
 
@@ -91,12 +93,37 @@ final class AIMEInputController: IMKInputController {
         if session.option("traditionalization") != traditional { session.setOption("traditionalization", traditional) }
     }
 
-    /// Records the current Chinese/English state (shared, or this app's own).
+    /// Chinese/English punctuation: the app's own setting, else the state shared by all apps.
+    func applyPunctOption() {
+        guard let session = liveSession else { return }
+        if engine.asciiPunct == nil {
+            let remembered = (try? RimeEngine.shared.openConfig("default").stringList("switcher/save_options"))?
+                .contains("ascii_punct") == true
+            engine.asciiPunct = remembered ? session.option("ascii_punct") : engine.features.asciiPunct
+        }
+        let desired = appOptions.asciiPunct ?? engine.asciiPunct ?? false
+        if session.option("ascii_punct") != desired { session.setOption("ascii_punct", desired) }
+    }
+
+    /// Records the current Chinese/English state (shared, or this app's own), and the
+    /// punctuation state unless this app pins its own.
     private func rememberAsciiMode() {
         guard let session = liveSession else { return }
+        if appOptions.asciiPunct == nil, engine.activeController === self {
+            engine.asciiPunct = session.option("ascii_punct")
+        }
         DebugLog.write("ascii record app=\(bundleID ?? "?") appDefault=\(appOptions.asciiMode.map(String.init) ?? "nil") ascii=\(session.option("ascii_mode"))")
         engine.asciiState.record(session.option("ascii_mode"), app: bundleID, appDefault: appOptions.asciiMode,
                                  isActive: engine.activeController === self)
+    }
+
+    /// A Caps Lock press right before deactivation was macOS switching to ABC; undo the
+    /// 中/英 toggle librime made for it so switching back keeps the earlier state.
+    private func undoCapsLockSourceSwitch() {
+        guard let restore = capsSwitch.deactivated(at: Date()), engine.activeController === self,
+              let session = liveSession, session.option("ascii_mode") != restore else { return }
+        DebugLog.write("ascii caps-lock source switch: restore ascii=\(restore)")
+        session.setOption("ascii_mode", restore)
     }
 
     // MARK: - IMKStateSetting
@@ -115,11 +142,17 @@ final class AIMEInputController: IMKInputController {
         engine.refreshTheme()
         bundleID = client?.bundleIdentifier()
         appOptions = engine.appOptions(for: bundleID)
-        lastModifiers = NSEvent.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        // One snapshot for both views so a flag flip between reads can't desync them.
+        let currentFlags = NSEvent.modifierFlags
+        lastModifiers = currentFlags.intersection(.deviceIndependentFlagsMask)
+        lastDeviceFlags = currentFlags.rawValue
         // Nothing here may call back into the client: it is blocked until activateServer
         // returns. A reused session may be stale if another window of the same app
         // switched Chinese/English meanwhile, so re-apply the remembered state.
-        if ensureSession() != nil { applyAppOptions(newSession: false) }
+        if ensureSession() != nil {
+            applyAppOptions(newSession: false)
+            applyPunctOption()
+        }
         engine.voiceFeature.activate(voiceOwner)
     }
 
@@ -127,11 +160,13 @@ final class AIMEInputController: IMKInputController {
         nonisolated(unsafe) let this = self, client = sender as? any IMKTextInput
         MainActor.assumeIsolated {
             DebugLog.write("deactivate app=\(this.bundleID ?? "?")")
+            this.undoCapsLockSourceSwitch()
             this.rememberAsciiMode()
             this.menuHold.cancel()
             this.liveSession?.cancelModifierTap()
             this.recentText.reset()
             this.lastModifiers = []
+            this.lastDeviceFlags = 0
             this.closeMenu()
             this.cancelPolish()
             this.engine.voiceFeature.deactivate(this.voiceOwner)
@@ -223,13 +258,6 @@ final class AIMEInputController: IMKInputController {
                 else { engine.showStatus("没有可处理的文字：先打一段字，或选中一段文字") }
                 return true
             }
-            // Paste joins the local draft before the generic shortcut path can flush
-            // it. Menu/AI shortcuts keep their existing priority.
-            if event.modifierFlags.intersection([.command, .control, .option, .shift]) == .command,
-               event.charactersIgnoringModifiers?.lowercased() == "v",
-               pasteIntoDraft(client: client, session: session) {
-                return true
-            }
             // A pending draft (nothing being composed): Return / Esc confirm it, ⌫ edits
             // it, navigation and shortcuts confirm it and then reach the app.
             if !draft.isEmpty, !isComposing {
@@ -290,28 +318,41 @@ final class AIMEInputController: IMKInputController {
 
         case .flagsChanged:
             engine.lastUserKeyAt = Date()
+            // Two views of the same event: the raw value keeps device-dependent bits
+            // (left vs right ⌥/⌃/⌘) for the menu-hold state machine; librime only
+            // understands the device-independent mask, which merges the sides.
+            let deviceFlags = event.modifierFlags.rawValue
             let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
             // Modifier transitions only (never character keys): safe to log for diagnosis.
             engine.logger.debug("flagsChanged keyCode=\(event.keyCode, privacy: .public) flags=\(flags.rawValue, privacy: .public) last=\(self.lastModifiers.rawValue, privacy: .public)")
-            defer { lastModifiers = flags }
+            defer { lastModifiers = flags; lastDeviceFlags = deviceFlags }
             DebugLog.write("flagsChanged keyCode=\(event.keyCode) flags=\(flags.rawValue) last=\(lastModifiers.rawValue) ascii=\(session.option("ascii_mode"))")
             // Mac Catalyst apps (Messages) deliver every modifier event twice. A repeat
             // has the same flags as the last one and would read as "released", toggling
             // Chinese/English the moment Shift goes down.
-            guard flags != lastModifiers else { return false }
+            guard deviceFlags != lastDeviceFlags else { return false }
             // Hold-to-open for the quick menu. The release after a fired hold is kept from
             // librime, where a lone modifier tap can switch Chinese/English.
             menuHold.key = engine.features.menuHoldKey
-            if menuHold.consumeRelease(flags.rawValue) { return true }
-            if let token = menuHold.modifiersChanged(flags.rawValue) {
+            if menuHold.consumeRelease(deviceFlags) {
+                // The release we just swallowed was part of the hold; clear librime's
+                // tap latch so a surviving opposite-side key can't end the sequence
+                // with a lone release that ascii_composer reads as a 中/英 toggle tap.
+                session.cancelModifierTap()
+                return true
+            }
+            if let token = menuHold.modifiersChanged(deviceFlags) {
                 scheduleMenuHold(token: token)
             } else if !menuHold.isArmed {
                 engine.panel.hideHoldCue(animated: true) // let go early, or another modifier joined
             }
+            // Side-only changes (left ⌥ held, right ⌥ joins) carry no keysym for librime.
+            guard flags != lastModifiers else { return false }
             guard let keysym = RimeKey.keysym(forVirtualKey: event.keyCode) else { return false }
             if keysym == RimeKey.capsLock {
+                capsSwitch.pressed(asciiBefore: session.option("ascii_mode"), at: Date())
                 // Caps Lock toggles on a single event; report press + release.
-                let mask = RimeKey.mask(fromCocoaFlags: flags.rawValue)
+                let mask = RimeKey.capsLockMask(fromCocoaFlags: flags.rawValue)
                 handled = session.processKey(keysym, modifiers: mask)
                 session.processKey(keysym, modifiers: mask | RimeKey.releaseMask)
             } else {
@@ -345,8 +386,14 @@ final class AIMEInputController: IMKInputController {
     private var draftHint: PanelState {
         let hold: String = switch engine.features.menuHoldKey {
         case .option: "长按 ⌥ 动作"
+        case .optionLeft: "长按左⌥ 动作"
+        case .optionRight: "长按右⌥ 动作"
         case .control: "长按 ⌃ 动作"
+        case .controlLeft: "长按左⌃ 动作"
+        case .controlRight: "长按右⌃ 动作"
         case .command: "长按 ⌘ 动作"
+        case .commandLeft: "长按左⌘ 动作"
+        case .commandRight: "长按右⌘ 动作"
         case .off: "⌃⌥M 动作"
         }
         var state = PanelState(status: "↩ 上屏   \(hold)")
@@ -380,54 +427,6 @@ final class AIMEInputController: IMKInputController {
             hasMarkedText = false
             recentText.append(overflow)
         }
-    }
-
-    /// ⌘V appends plain text without inserting into the host. Return/Esc and the
-    /// user's auto-commit preference still confirm the draft in the usual way.
-    private func pasteIntoDraft(client: (any IMKTextInput)?, session: RimeSession) -> Bool {
-        guard draftLayerActive, let client else { return false }
-        defer { rememberAsciiMode() }
-        guard let pasted = clipboardText() else {
-            engine.showStatus("输入图层支持纯文本粘贴")
-            return true
-        }
-        guard !pasted.isEmpty else { return true }
-        let context = session.context()
-        if context.isComposing, context.candidates.isEmpty || context.commitTextPreview == nil {
-            engine.showStatus("请先选词或取消组字，再粘贴")
-            return true
-        }
-        // A previous client-less callback may have left a real commit queued. Keep
-        // it before the pasted text and include it in the capacity check.
-        if !context.isComposing { sync(client: client, commitToDraft: true) }
-        let preview = context.isComposing ? context.commitTextPreview ?? "" : ""
-        guard draft.canPaste(pasted, afterComposition: preview) else {
-            engine.showStatus("文字过长，请先上屏后在应用中粘贴")
-            return true
-        }
-        draftTimer?.cancel()
-        if context.isComposing {
-            let accepted = session.commitComposition()
-            let committed = session.consumeCommit()
-            if let committed {
-                // Keep the actual formatter output, even if it exceeds the preview.
-                // Normal append/sync could overflow or insert pure punctuation.
-                engine.usage.record(committed, app: bundleID)
-                lastCommitted = committed
-                draft.replace(with: draft.text + committed)
-            }
-            sync(client: client, commitToDraft: true)
-            guard accepted, committed != nil, !isComposing else {
-                engine.showStatus("请先选词或取消组字，再粘贴")
-                return true
-            }
-        }
-        guard draft.paste(pasted) else {
-            engine.showStatus("文字过长，请先上屏后在应用中粘贴")
-            return true
-        }
-        sync(client: client, commitToDraft: true)
-        return true
     }
 
     /// Puts the draft into the app (replacing the marked text that showed it).
