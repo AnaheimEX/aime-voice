@@ -3,12 +3,18 @@ import AppKit
 import Foundation
 public import SwiftUI
 
+/// Edits that were not saved yet. Choosing another pane in the sidebar destroys the view and its state,
+/// so a key typed but not saved would be gone on return; keep it here until it is saved.
+@MainActor private enum VoiceSettingsDraft {
+    static var unsaved: VoiceSettings?
+}
+
 public struct VoiceSettingsPane: View {
     private let style: VoiceSettingsStyle
 
     public init(style: VoiceSettingsStyle) { self.style = style }
 
-    @State private var settings = VoiceSettings.load()
+    @State private var settings = VoiceSettingsDraft.unsaved ?? VoiceSettings.load()
     @State private var saveMessage: String?
     @State private var saveFailed = false
     @State private var showingPolishPrompt = false
@@ -158,11 +164,13 @@ public struct VoiceSettingsPane: View {
         .formStyle(.grouped)
         .environment(\.voiceSettingsStyle, style)
         .tint(style.accent)
+        .onChange(of: settings) { VoiceSettingsDraft.unsaved = settings }
     }
 
     private func save() {
         do {
             try settings.save()
+            VoiceSettingsDraft.unsaved = nil
             DistributedNotificationCenter.default().postNotificationName(
                 Notification.Name(VoiceSettings.changedNotification), object: nil, userInfo: nil, deliverImmediately: true)
             saveFailed = false

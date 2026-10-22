@@ -46,14 +46,17 @@ struct VoicePolishPromptEditor: View {
             errorMessage = "语音润色仅支持 {text}，不支持 {selected} 或 {clipboard}"
             return
         }
-        var updated = settings
+        // Save only the prompt on top of what is on disk: the pane may hold edits that were never saved
+        // (a half-typed key, a shortcut that does not validate yet) and this dialog must not publish them.
+        var updated = VoiceSettings.load()
         updated.polishPrompt = prompt == VoiceProcessor.polishInstructions ? "" : prompt
         updated.polishStyle = updated.effectivePolishStyle
         do {
             try updated.save()
-            settings = updated
+            settings.polishPrompt = updated.polishPrompt
+            settings.polishStyle = updated.polishStyle
             DistributedNotificationCenter.default().postNotificationName(
-                Notification.Name(VoiceSettings.changedNotification), object: nil)
+                Notification.Name(VoiceSettings.changedNotification), object: nil, userInfo: nil, deliverImmediately: true)
             dismiss()
         } catch {
             errorMessage = "保存失败：\(error.localizedDescription)"

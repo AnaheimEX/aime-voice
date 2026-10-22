@@ -97,7 +97,7 @@ struct VoiceVocabularyEditor: View {
             VocabularyReturnField(text: $newWord, placeholder: "添加姓名、术语或专有名词，回车添加", onReturn: addWord)
                 .frame(height: 26)
                 .accessibilityIdentifier("voice-vocabulary-new-word")
-            Text("Whisper、macOS 与支持热词的云端服务使用这些词条，标准和聊天润色也会参考写法；Cohere 和 Interfaze 暂不使用。最多 500 个；最终文字纠错对各识别方式均生效。")
+            Text("Whisper、macOS 与支持热词的云端服务使用这些词条，标准和聊天润色也会参考写法；Cohere 和 Interfaze 暂不使用。最多 500 个；纠错规则对各识别方式均生效，在润色前替换一次。")
                 .font(.caption).foregroundStyle(.secondary)
             if editingWordIndex != nil {
                 HStack {
@@ -151,7 +151,7 @@ struct VoiceVocabularyEditor: View {
                 } label: { Label("新增规则", systemImage: "plus") }
                 .disabled(editingRule != nil || draft.value.replacements.count >= 200)
             }
-            Text("润色等文字整理完成后，匹配最终文字并直接替换，再上屏；仅转写也生效 · 最多 200 条")
+            Text("在润色等文字整理之前替换一次，润色看到的是替换后的文字；仅转写也生效 · 最多 200 条")
                 .font(.caption).foregroundStyle(.secondary)
             if let rule = editingRule {
                 VoiceReplacementEditor(
