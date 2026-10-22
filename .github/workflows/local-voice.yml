@@ -1,0 +1,27 @@
+# Local voice module checks. Kept apart from upstream's ci.yml so upstream merges never touch it.
+name: Local voice
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  voice:
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Test voice processing and routing
+        run: |
+          python3 scripts/tests/test_voice_lifecycle.py --compile-routing "$RUNNER_TEMP/aime-voice-routing-check"
+          python3 scripts/tests/test_voice_routing.py "$RUNNER_TEMP/aime-voice-routing-check"
+
+      - name: Test native voice insertion
+        run: |
+          swiftc -swift-version 6 -parse-as-library Packages/AIMEVoiceKit/Sources/AIMEVoiceHost/VoiceCommitTarget.swift scripts/tests/VoiceCommitCheck.swift -o "$RUNNER_TEMP/aime-voice-commit-check"
+          "$RUNNER_TEMP/aime-voice-commit-check"

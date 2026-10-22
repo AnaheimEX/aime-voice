@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Assemble local Preview from the current full Xcode build, before signing."""
 import argparse
+import json
 import pathlib
 import plistlib
 import shutil
@@ -48,6 +49,14 @@ for bundle, identifier in bundles:
                     "TISInputSourceID", "ComponentInputModeDict", "AIMEVoiceServiceIdentifier"):
             info[key] = old[key]
     path.write_bytes(plistlib.dumps(info, fmt=plistlib.FMT_XML))
+# Input menu names are localized by input source id. Upstream's InfoPlist.strings name
+# only the production ids; give the preview ids the same names.
+preview_ids = {"app.zool.inputmethod.aime": "app.zool.inputmethod.aime.voicepreview",
+               "app.zool.inputmethod.aime.hans": "app.zool.inputmethod.aime.voicepreview.hans"}
+for strings in (destination / "Contents/Resources").glob("*.lproj/InfoPlist.strings"):
+    names = json.loads(subprocess.check_output(["plutil", "-convert", "json", "-o", "-", str(strings)]))
+    names.update({preview: names[production] for production, preview in preview_ids.items() if production in names})
+    strings.write_bytes(plistlib.dumps(names, fmt=plistlib.FMT_BINARY))
 # Xcode applies an intermediate ad-hoc signature. Restore the same pinned
 # plugin inputs before regenerating the embedded inventory and local signing.
 for library in (root / "Vendor/librime/lib/rime-plugins").glob("*.dylib"):

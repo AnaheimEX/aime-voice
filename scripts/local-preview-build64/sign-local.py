@@ -7,7 +7,7 @@ app, reference, root = map(pathlib.Path, sys.argv[1:])
 identity = "79C9B3548DA35EC4B1DD2E8B4BF80E07D58F68B2"
 components = [
     ("Contents/Applications/AIME Settings.app", "Apps/AIMESettings/AIMESettings.entitlements"),
-    ("Contents/XPCServices/AIME Voice.xpc", "Apps/AIMEVoiceService/AIMEVoice.entitlements"),
+    ("Contents/XPCServices/AIME Voice.xpc", "Local/AIMEVoiceService/AIMEVoice.entitlements"),
     (".", "Apps/AIME/AIME.entitlements"),
 ]
 for relative, entitlement_path in components:
@@ -19,6 +19,9 @@ for relative, entitlement_path in components:
     # local Preview processes to load their embedded native ASR framework.
     if relative != ".":
         entitlements["com.apple.security.cs.disable-library-validation"] = True
+    else:
+        # The voice host owns microphone access; upstream's AIME.entitlements stays unchanged.
+        entitlements["com.apple.security.device.audio-input"] = True
     local = app.parent / (bundle.name + ".local.entitlements")
     local.write_bytes(plistlib.dumps(entitlements))
     subprocess.run(["codesign", "--force", "--options", "runtime", "--timestamp=none", "--sign", identity,
