@@ -21,7 +21,7 @@ jobs:
           python3 scripts/tests/test_voice_lifecycle.py --compile-routing "$RUNNER_TEMP/aime-voice-routing-check"
           python3 scripts/tests/test_voice_routing.py "$RUNNER_TEMP/aime-voice-routing-check"
 
-      - name: Test native voice insertion
-        run: |
-          swiftc -swift-version 6 -parse-as-library Packages/AIMEVoiceKit/Sources/AIMEVoiceHost/VoiceCommitTarget.swift scripts/tests/VoiceCommitCheck.swift -o "$RUNNER_TEMP/aime-voice-commit-check"
-          "$RUNNER_TEMP/aime-voice-commit-check"
+      # Builds AIMEVoice and AIMEVoiceHost as modules, then runs the host, native insertion
+      # (VoiceCommitCheck) and rewrite-selection checks against them.
+      - name: Test voice host and native insertion
+        run: python3 scripts/tests/test_voice_feature.py

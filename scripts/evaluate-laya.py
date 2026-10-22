@@ -153,6 +153,9 @@ class PredictClient:
                     size += len(chunk)
                     if size > 1048576:
                         raise ValueError("oversized response")
+                # Python 3.9's read1 leaves a fully read Content-Length response open, and
+                # the next request on this keep-alive connection fails with ResponseNotReady.
+                response.close()
                 remaining()
                 result = classify(json.loads(b"".join(chunks)), threshold, action_threshold)
         except (TimeoutError, socket.timeout):
