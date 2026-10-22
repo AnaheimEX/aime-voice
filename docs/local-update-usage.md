@@ -56,7 +56,7 @@ python3 scripts/local-update.py rollback --config /absolute/config.json --build 
 
 `installation.configured` 表示固定 hooks、安装配置及现有 App 的只读验证已通过；**不表示宿主空闲、已经取得租约或实机验收通过**。`idle_checked` 在 check 中始终为 false。安装基线内容失配或签名验证失败时，仍可返回成功的上游查询结果，同时设置 `configured:false` 和具体错误；apply 被阻断。源码基线缺失或受保护修改未提交属于无法正确整合的前置错误，整个命令失败。
 
-其他按阶段出现的字段：`operation_dir`、`baseline_commit`、`integration_commit`。错误对象包含 `category`、固定说明 `message`，可能增加 `conflicts`（相对源码路径）、`path` 或 `errno`。不输出 Git/hook 原始响应、密钥、录音或用户输入文本。
+其他按阶段出现的字段：`operation_dir`（仅 `apply`；`check` 用完即删临时检出，不返回该字段）、`baseline_commit`、`integration_commit`。错误对象包含 `category`、固定说明 `message`，可能增加 `conflicts`（相对源码路径）、`path` 或 `errno`。不输出 Git/hook 原始响应、密钥、录音或用户输入文本。
 
 阶段：`config`、`resolve`、`checked`、`merge`、`verify-reference`、`verify-source`、`build`、`sign`、`verify-app`、`idle-gate`、`install`、`launch`、`recover`、`release`、`complete`。事件包含 `schema_version/command/phase/version/upstream_commit/build/recovery`；无进度百分比承诺，最终状态以 result 与退出码为准。
 

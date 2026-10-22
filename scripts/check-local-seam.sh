@@ -36,17 +36,27 @@ else
 fi
 
 upstream_files=$(mktemp)
-trap 'rm -f "$upstream_files"' EXIT
+changed_files=$(mktemp)
+added_files=$(mktemp)
+trap 'rm -f "$upstream_files" "$changed_files" "$added_files"' EXIT
 git ls-tree -r --name-only "$BASE" >"$upstream_files"
+# --no-renames: a renamed or moved upstream file must show up under its upstream path (as a
+# deletion) and its new path (as an addition), not only under the new path.
+git diff --no-renames --name-only "$BASE" -- >"$changed_files"
+{
+  git diff --no-renames --name-only --diff-filter=A "$BASE" -- Apps Packages/AIMEKit
+  git ls-files --others --exclude-standard -- Apps Packages/AIMEKit
+} >"$added_files"
 
-for file in $(git diff --name-only "$BASE" --); do
+# Read line by line so paths with spaces are not split into words.
+while IFS= read -r file; do
   if grep -Fqx -- "$file" "$upstream_files"; then
     printf '%s\n' "$ALLOWED_UPSTREAM" | grep -Fqx -- "$file" || fail "upstream file changed outside the hook list: $file"
   fi
-done
-for file in $(git diff --name-only --diff-filter=A "$BASE" -- Apps Packages/AIMEKit; git ls-files --others --exclude-standard -- Apps Packages/AIMEKit); do
-  echo "$file" | grep -Eq "$ALLOWED_LOCAL_IN_UPSTREAM" || fail "local file inside an upstream directory: $file (move it under Local/)"
-done
+done <"$changed_files"
+while IFS= read -r file; do
+  printf '%s\n' "$file" | grep -Eq "$ALLOWED_LOCAL_IN_UPSTREAM" || fail "local file inside an upstream directory: $file (move it under Local/)"
+done <"$added_files"
 
 require_file() {
   [ -f "$1" ] || fail "missing $1"

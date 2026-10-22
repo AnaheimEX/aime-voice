@@ -363,7 +363,7 @@ def verify_current(config, current):
             "Installed App differs from the last integration receipt; explicitly rebaseline before updating.")
 
 
-def execute(args, result):
+def execute(args, result, scratch):
     require(args.command != "apply" or full_sha(args.upstream), "invalid_request", "apply requires --upstream with a full stable commit SHA.")
     require(args.command != "rollback" or args.build, "invalid_request", "rollback requires --build.")
     config, source, state = config_at(args.config, validate_baseline=args.command != "rollback")
@@ -406,7 +406,11 @@ def execute(args, result):
                                                upstream_commit=current["upstream_commit"]))
         result["phase"] = "resolve"
         operation, repository = prepare(config, source, state)
-        result["operation_dir"] = str(operation)
+        if args.command == "check":
+            # A check only needs the checkout to resolve the release; keep nothing behind.
+            scratch.append(operation)
+        else:
+            result["operation_dir"] = str(operation)
         version, commit = resolve_release(config, repository, args.upstream)
         result.update(version=version, upstream_commit=commit, phase="checked", baseline_commit=config["baseline"]["commit"],
                       update_available=commit != config["baseline"]["upstream_commit"])
@@ -467,8 +471,9 @@ def main():
     args = parser.parse_args()
     result = Progress(args.events, schema_version=1, command=args.command, ok=False, phase="config", version=None,
                       upstream_commit=None, build=None, rollback_build=None, recovery="unchanged", error=None)
+    scratch = []
     try:
-        execute(args, result)
+        execute(args, result, scratch)
     except Failure as error:
         result["ok"] = False
         result["error"] = dict(category=error.category, message=str(error), **error.details)
@@ -478,6 +483,9 @@ def main():
     except (OSError, subprocess.TimeoutExpired):
         result["ok"] = False
         result["error"] = dict(category="operation_failed", message="Filesystem, network or command operation failed.")
+    finally:
+        for directory in scratch:
+            shutil.rmtree(directory, ignore_errors=True)
     if args.events:
         result["type"] = "result"
     print(json.dumps(result, ensure_ascii=False) if args.json or args.events else result, flush=True)
