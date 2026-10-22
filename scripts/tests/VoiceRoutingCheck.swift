@@ -223,6 +223,26 @@ import Foundation
                     "speech gaps must not split Chinese words; sentences and technical whitespace must survive")
         print("PASS Chinese speech gaps joined without damaging sentences or technical text")
 
+        // Chat clause punctuation becomes spaces once; an accelerated local_edit must not lose them.
+        s.llm.model = "pause-echo"; s.decision.model = "local-edit"; s.decisionMode = "accelerate"
+        let chatLocal = try await VoiceProcessor().process("好的！谢谢你", settings: s)
+        try require(chatLocal.route == "local_edit" && chatLocal.text == "好的 谢谢你", "chat local_edit must be formatted once: \(chatLocal.text)")
+        s.decisionMode = "off"
+        print("PASS chat local_edit keeps its clause spaces")
+
+        // Escaped prompt text and inline reasoning never reach the text field.
+        let chatPrompt = s.polishPrompt
+        s.polishPrompt = ""; s.llm.model = "entity-echo"
+        let ampersand = try await VoiceProcessor().process("R&D部门需要审批", settings: s)
+        try require(ampersand.text == "R&D部门需要审批", "entities echoed from the escaped prompt must be restored: \(ampersand.text)")
+        s.llm.model = "think-inline"
+        var inlineThinkingRejected = false
+        do { _ = try await VoiceProcessor().process("这段文字需要整理", settings: s) }
+        catch { inlineThinkingRejected = error.localizedDescription.contains("未关闭思考模式") }
+        try require(inlineThinkingRejected, "an inline <think> block must not be committed")
+        s.polishPrompt = chatPrompt
+        print("PASS escaped entities restored and inline thinking rejected")
+
         s.llm.model = "semantic-pause"; s.decision.model = "semantic-pause"; s.decisionMode = "accelerate"
         let semanticPause = try await VoiceProcessor().process("我想，明天，去北京。", settings: s)
         try require(semanticPause.text == "我想明天去北京",

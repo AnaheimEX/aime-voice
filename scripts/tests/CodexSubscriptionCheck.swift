@@ -113,10 +113,13 @@ private enum CheckError: Error { case failed(String) }
             do { _ = try await client.complete(request: request(scenario)); throw CheckError.failed("must reject \(scenario)") }
             catch CodexSubscriptionClient.Failure.incomplete {}
         }
-        for scenario in ["empty", "malformed", "wrong-mime"] {
+        for scenario in ["malformed", "wrong-mime"] {
             do { _ = try await client.complete(request: request(scenario)); throw CheckError.failed("must reject \(scenario)") }
             catch CodexSubscriptionClient.Failure.invalidResponse {}
         }
+        // An empty completed reply is its own failure so polish can fall back to the transcript.
+        do { _ = try await client.complete(request: request("empty")); throw CheckError.failed("must reject empty") }
+        catch CodexSubscriptionClient.Failure.emptyOutput {}
         for (scenario, expected) in [("failed", "subscription_sharing_usage_limit_exceeded"), ("error", "server_error"), ("unknown-error", nil)] as [(String, String?)] {
             do { _ = try await client.complete(request: request(scenario)); throw CheckError.failed("must reject \(scenario)") }
             catch CodexSubscriptionClient.Failure.responseFailed(let code) { try require(code == expected, "safe error code") }

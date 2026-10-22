@@ -12,7 +12,7 @@ public actor CodexSubscriptionClient {
 
     public enum Failure: LocalizedError, Sendable {
         case loginRequired, permission, invalidResponse, invalidIdentity, denied, timedOut
-        case http(Int), loginFailed, expired, storage, incomplete
+        case http(Int), loginFailed, expired, storage, incomplete, emptyOutput
         case requestRejected(parameter: String?), responseFailed(code: String?)
         public var errorDescription: String? {
             switch self {
@@ -31,6 +31,7 @@ public actor CodexSubscriptionClient {
             case .expired: "ChatGPT 登录已失效，请重新登录"
             case .storage: "无法安全保存 ChatGPT 登录凭据"
             case .incomplete: "ChatGPT 未完成文本处理，已拒绝采用不完整结果，请重试或缩短录音"
+            case .emptyOutput: "ChatGPT 返回了空文本"
             }
         }
     }
@@ -243,6 +244,7 @@ public actor CodexSubscriptionClient {
               before.subject == original.subject, before.clientID == original.clientID else { throw Failure.expired }
         if before.expiresAt.timeIntervalSinceNow > 60 { return before }
         guard let rotatingToken = before.refreshToken else { throw Failure.expired }
+        try await refreshSigningKeysIfStale()
         let tokens = try await tokenRequest([
             "grant_type": "refresh_token", "client_id": before.clientID,
             "refresh_token": rotatingToken, "resource": Self.resource,
@@ -287,7 +289,10 @@ public actor CodexSubscriptionClient {
         request.httpBody = fields.sorted(by: { $0.key < $1.key }).map {
             "\($0.key.addingPercentEncoding(withAllowedCharacters: allowed)!)=\($0.value.addingPercentEncoding(withAllowedCharacters: allowed)!)"
         }.joined(separator: "&").data(using: .utf8)
-        return try await json(request)
+        do { return try await json(request) } catch Failure.requestRejected {
+            // A spent or revoked grant is HTTP 400 invalid_grant here, not a bad inference request.
+            throw fields["grant_type"] == "refresh_token" ? Failure.expired : Failure.loginFailed
+        }
     }
 
     private func credentials(_ tokens: [String: Any], client: String, nonce: String?, previous: Credentials?) async throws -> Credentials {

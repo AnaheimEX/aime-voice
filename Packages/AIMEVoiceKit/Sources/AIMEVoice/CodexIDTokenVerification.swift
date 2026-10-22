@@ -3,6 +3,25 @@ import Security
 
 // ID-token signature and claim checks against the issuer's published JWKS.
 extension CodexSubscriptionClient {
+    /// Load the signing keys when none are cached or the cache is over an hour old. A refresh calls this
+    /// before it spends the one-time refresh token, so a key-set outage cannot lose the rotated token.
+    func refreshSigningKeysIfStale() async throws {
+        if let fetched = jwksFetchedAt, fetched.timeIntervalSinceNow >= -3600, !jwks.isEmpty { return }
+        try await fetchSigningKeys()
+    }
+
+    private func fetchSigningKeys() async throws {
+        let response = try await json(URLRequest(url: Self.jwksURL))
+        guard let keys = response["keys"] as? [[String: Any]] else { throw Failure.invalidIdentity }
+        jwks = keys.map { key in
+            Dictionary(uniqueKeysWithValues: key.compactMap { pair -> (String, String)? in
+                guard let value = pair.value as? String else { return nil }
+                return (pair.key, value)
+            })
+        }
+        jwksFetchedAt = Date()
+    }
+
     func verifiedSubject(_ token: String, audience: String, nonce: String?) async throws -> String {
         let segments = token.split(separator: ".", omittingEmptySubsequences: false)
         guard segments.count == 3,
@@ -12,15 +31,7 @@ extension CodexSubscriptionClient {
               let header = try JSONSerialization.jsonObject(with: headerData) as? [String: Any],
               header["alg"] as? String == "RS256", let kid = header["kid"] as? String else { throw Failure.invalidIdentity }
         if jwksFetchedAt == nil || jwksFetchedAt!.timeIntervalSinceNow < -3600 || !jwks.contains(where: { $0["kid"] == kid }) {
-            let response = try await json(URLRequest(url: Self.jwksURL))
-            guard let keys = response["keys"] as? [[String: Any]] else { throw Failure.invalidIdentity }
-            jwks = keys.map { key in
-                Dictionary(uniqueKeysWithValues: key.compactMap { pair -> (String, String)? in
-                    guard let value = pair.value as? String else { return nil }
-                    return (pair.key, value)
-                })
-            }
-            jwksFetchedAt = Date()
+            try await fetchSigningKeys()
         }
         guard let key = jwks.first(where: { $0["kid"] == kid && $0["kty"] == "RSA" && ($0["alg"] == nil || $0["alg"] == "RS256") }),
               key["use"] == nil || key["use"] == "sig",

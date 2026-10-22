@@ -72,7 +72,7 @@ extension CodexSubscriptionClient {
                 }
             }
             let result = texts.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !result.isEmpty else { throw Failure.invalidResponse }
+            guard !result.isEmpty else { throw Failure.emptyOutput }
             return result
         default: return nil
         }

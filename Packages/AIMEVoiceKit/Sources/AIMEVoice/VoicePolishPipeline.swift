@@ -25,6 +25,10 @@ extension VoiceProcessor {
                 throw ProcessingFailure.unsupportedContext
             }
         }
+        // Standard and chat polish get the hotword spellings; custom prompts stay as written.
+        let modelInstructions = settings.mode == "polish" && settings.effectivePolishStyle != .custom
+            ? settings.vocabulary.polishReference().map { instructions + "\n" + $0 } ?? instructions
+            : instructions
         if settings.mode == "polish", settings.decisionMode == "accelerate",
            settings.decisionProtocol == "laya-predict" {
             if let term = settings.vocabulary.directTerm(matching: text) {
@@ -32,7 +36,8 @@ extension VoiceProcessor {
                 return VoiceProcessingResult(text: term, route: "dictionary_local", decisionInvoked: false,
                     decisionAdopted: false, elapsedMilliseconds: milliseconds)
             }
-            return try await Self.processLaya(text, instructions: instructions, settings: settings, started: started)
+            return try await Self.processLaya(text, instructions: instructions, modelInstructions: modelInstructions,
+                                              settings: settings, started: started)
         }
         guard settings.llm.isConfigured else { throw ProcessingFailure.missingModel }
         if settings.mode == "custom" && instructions.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -63,10 +68,6 @@ extension VoiceProcessor {
         let localEligible = Self.canUseLocal(text) && !needsSentenceRepair
             && (!usesJoinedChatPolicy || joinedCandidate != nil)
         let metrics = DecisionMetrics()
-        // Standard and chat polish get the hotword spellings; custom prompts stay as written.
-        let modelInstructions = settings.mode == "polish" && settings.effectivePolishStyle != .custom
-            ? settings.vocabulary.polishReference().map { instructions + "\n" + $0 } ?? instructions
-            : instructions
         let stream = AsyncStream<Outcome>.makeStream(bufferingPolicy: .unbounded)
         let original = Task.detached {
             do {
@@ -103,10 +104,18 @@ extension VoiceProcessor {
                 await metrics.decided(choice.route)
                 guard settings.decisionMode == "accelerate", choice.isConfident else { return }
                 try Task.checkCancellation()
-                let candidate = usesJoinedChatPolicy ? (joinedCandidate ?? text)
-                    : (settings.effectivePolishStyle == .standard
-                        ? VoicePolishFormatting.withoutTerminalPunctuation(text)
-                        : Self.localCandidate(text))
+                // presentPolish formats chat output once. A candidate whose clause punctuation is already
+                // spaces would lose them when presentPolish joins Chinese words ("好的 谢谢" -> "好的谢谢").
+                let candidate: String
+                if usesJoinedChatPolicy {
+                    candidate = joinedCandidate ?? text
+                } else {
+                    switch settings.effectivePolishStyle {
+                    case .standard: candidate = VoicePolishFormatting.withoutTerminalPunctuation(text)
+                    case .chat: candidate = text
+                    case .custom: candidate = Self.localCandidate(text)
+                    }
+                }
                 switch choice.route {
                 case "no_edit":
                     guard localEligible, !usesJoinedChatPolicy || text == candidate else { return }

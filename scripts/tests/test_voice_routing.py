@@ -67,6 +67,9 @@ class Handler(BaseHTTPRequestHandler):
                 answer['confidence'] = 0.5
             elif model == 'invalid':
                 answer['probabilities']['no_edit'] = 2
+            elif model == 'local-edit':
+                answer['choice'] = 'local_edit'
+                answer['probabilities'] = {r: int(r == 'local_edit') for r in routes}
             elif model in ('full', 'main-error-reject'):
                 answer['choice'] = 'full_edit'
                 answer['probabilities'] = {r: int(r == 'full_edit') for r in routes}
@@ -82,6 +85,10 @@ class Handler(BaseHTTPRequestHandler):
             if model == 'dictionary-check' and text.strip() != '打开GitHub，保留GitHub123':
                 errors.append('dictionary replacement did not run before polish')
             output = {'dictionary-check': '请打开git hab，保留GitHub123', 'dictionary-generated': '打开git hab', 'dictionary-removed': '打开代码仓库', 'empty': '   ', 'punctuation-only': '。', 'semantic-pause': '我想明天去北京。', 'number': '2个', 'english': 'OK'}.get(model, text)
+            if model == 'entity-echo' and match:
+                output = match[1]  # a model that repeats the escaped prompt text verbatim
+            elif model == 'think-inline':
+                output = '<think>先分析一下</think>' + text
             ordinal = requests.count((model, self.path))
             if model == 'hedge-slow':
                 time.sleep(2.4 if ordinal == 1 else 0.02)
