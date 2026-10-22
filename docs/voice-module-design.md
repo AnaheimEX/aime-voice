@@ -57,7 +57,7 @@ func present(_ effect: HostPresentation, for owner: InputOwner)
 
 ## 词库定制增量
 
-`LocalVocabularyCustomization` 提供 `plan(entries:schemas:)`、`updating(_:for:using:)` 和 `isSatisfied(_:by:)`。生成、挂载与检查使用同一计划，沿用 `VocabularyEntry`、双拼转换和 `ConfigValue`。
+`LocalVocabularyCustomization` 只后处理上游的结果：上游 `rebuild` 写完 `aime_online*.txt` 和只读挂载后调用 `afterRebuild`，用同样的行生成 `aime_online*_dynamic.dict.yaml` 与依赖 schema，并把每个上游挂载改为可学习的 `userdb`；`tableSignature` 追加 `signaturePart`，文件缺失或挂载不可学习时触发重建。哪些行、怎样编码、哪些方案挂载都由上游决定。开关是 App Info.plist 的 `AIMELocalCustomization`（`project.local.yml` 设置），没有该键时两个挂钩都不做任何事。
 
 上游负责下载、订阅、写文件、配置层和重新部署。定制模块仅返回确定性内容与挂载变化，只修改明确拥有的键和列表项，保留其他 translator、依赖及用户 patch。无法识别布局时失败；保留词典名、user_dict 身份、权重与学习配置，不清空学习库。用户目录数据不属于源码整合产物。
 

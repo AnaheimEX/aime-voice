@@ -1,6 +1,16 @@
 # 本机定制当前进度
 
-更新日期：2026-10-16。本地 `main` 已把上游 0.1.9 合并进来，语音模块仍只在这条分支上。当前本机预览已安装 **Build69**（0.1.9，CFBundleVersion 69）。三个组件均为 Build69，通用二进制为 x86_64 与 arm64，CLI 为 arm64。设置按自身 bundle id 识别 `app.zool.inputmethod.aime.voicepreview`，改配置后的自动部署和「重新部署」交给正在运行的输入法。CLI 增加 Frameworks rpath，并关闭 library validation。`aime --version` 输出版本 0.1.9。⇧⌘R 后 `build/default.yaml` 与 `build/rime_frost.schema.yaml` 于 21:48:42 重新生成，部署确认已清除，没有方案编译失败。输入源恢复为 `app.zool.inputmethod.aime.voicepreview.hans`。最新完整产物为 `../dist/Build69/AIME Voice Preview.app`。Build68 产物、签名临时文件和安装回退包已删除。Xcode DerivedData 与 SwiftPM 缓存仍保留。用户模型、词典和 `voice-settings.json` 未修改。未做真人录音。下方为历史记录。
+更新日期：2026-10-22。本地 `main` 已合并上游 0.1.10，并按[与上游同步](upstream-merge.md)重整为三层：本地文件、上游文件里的白名单挂钩、`project.local.yml` 构建入口。当前本机预览已安装 **Build70**（0.1.10，CFBundleVersion 70）。最新完整产物为 `../dist/Build70/AIME Voice Preview.app`，Build69 回退包为 `../dist/Build70/work/previous-build69.app`。下方为本次结果与历史记录。
+
+## 2026-10-22 上游 0.1.10 与模块化重整（Build70 已安装）
+
+- 先把 Build69 的未提交源码提交为 `0f246be` 并打 tag `local/pre-modular-build69`，再合并 `origin/main`（0.1.10），所有上游文件取上游版本。合并提交 `2698d3b` 时上游文件与 `origin/main` 逐字一致。
+- 语音四个 target 移到独立包 `Packages/AIMEVoiceKit`，依赖锁定沿用 Build69 的版本；输入法、设置和 XPC 的本地源码移到 `Local/`。上游 `Package.swift`、`Package.resolved`、`project.yml`、`Info.plist`、entitlements、`InfoPlist.strings`、CI、README、隐私说明和第三方声明恢复原样；对应内容改由 `project.local.yml`、`stage.py`、`sign-local.py`、`.github/workflows/local-voice.yml`、`docs/voice-privacy.md` 和 `licenses/LOCAL_THIRD_PARTY_NOTICES.md` 提供。文案类改动（「文字词库」改名等）不再保留。
+- 上游文件只剩 9 个挂钩文件（合计约 33 行新增、9 行修改），由 `scripts/check-local-seam.sh` 按白名单检查。预览身份改由 `LocalBuildInfo` 统一识别。
+- 词库定制改为后处理：上游 `rebuild` 照常生成词表和只读挂载，本地再生成可学习词典并改写挂载。上游 0.1.10 新增的自然码双拼因此自动获得 `aime_online_ziranma_dynamic`。开关为 App Info.plist 的 `AIMELocalCustomization`，没有该键时挂钩不做任何事。
+- `swift test --filter AIMECoreTests`：249 项全部通过，包括原样的上游 `SubscriptionTests` 和 6 项本地词库测试。`check-local-seam.sh` 对越界修改和上游目录中的本地文件都能报错。
+- `scripts/local-preview-build64/build.sh 70` 完成 Xcode Release（x86_64 与 arm64）、CLI（arm64）、组装和本机证书签名，三个原 designated requirements 保持，完整包严格验证通过。日志仍有 Xcode 设备插件、SwiftCompile “exit code 0” 和 CTranscribe 符号链接警告，与以往构建相同。CLI 资源包为 native SwiftPM 的扁平布局，已在临时工作区用 `aime get` 读到设置目录。
+- 安装后三个组件为 Build70，主程序、设置和语音 XPC 已启动，输入源恢复为 `app.zool.inputmethod.aime.voicepreview.hans`。首次启动的词库检查已把挂载保持为可学习的 `userdb`，全拼与小鹤可学习词典内容未变；签名首次为 `local-learnable-v1-repair`，下一次部署再重建一次后稳定。用户模型、词典和 `voice-settings.json` 未修改。未做真人录音或跨应用验收。
 
 ## 2026-10-16 推测润色与长触发词（Build67 已安装）
 
@@ -44,7 +54,7 @@
 | 输入法语音功能 | `AIMEVoiceHost/VoiceFeature` 管理快捷键、会话、复用 XPC 通道、提示条、音效、焦点校验、原生上屏及 AX 改写 | `LocalVoiceAdapter` 连接输入上下文；控制器激活、按键、失活和进程退出调用模块接口 |
 | 录音服务 | `AIMEVoice/VoiceRuntime` 管理录音、识别、处理、取消及进程内唯一采音所有权 | XPC 入口负责调用者验证、消息和进程事务 |
 | 语音设置 | `AIMEVoiceSettings/VoiceSettingsPane(style:)` 管理完整语音设置、词典和测试音频资源 | `RootView` 提供导航与有限颜色角色 |
-| 词库定制增量 | `AIMECore/LocalCustomization/LocalVocabularyCustomization` 确定性生成可学习词典并合并挂载 | 原订阅管理器调用 `plan/updating/isSatisfied`，保留学习库身份 |
+| 词库定制增量 | `AIMECore/LocalCustomization/LocalVocabularyCustomization` 把上游生成的词表和挂载改为可学习词典 | 订阅管理器 `rebuild` 末尾调用 `afterRebuild`，`tableSignature` 追加 `signaturePart`；保留学习库身份 |
 | 本机集成更新 | `scripts/local-update.py` 提供 `check/apply/rollback` 和 JSON 结果；设置页已有入口 | 安装所需生产接口尚未接通，缺少有效配置时禁止安装 |
 
 三个语音模块不依赖 `AIMECore` 或 `RimeKit`。设置资源通过 `Bundle.module` 读取；原 App 目录不保留同功能副本。接口与维护边界见[模块契约](voice-module-design.md)。
