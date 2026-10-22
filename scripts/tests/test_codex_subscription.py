@@ -5,7 +5,7 @@ import subprocess
 import tempfile
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
-SOURCES = ROOT / "Packages/AIMEKit/Sources/AIMEVoice"
+SOURCES = ROOT / "Packages/AIMEVoiceKit/Sources/AIMEVoice"
 with tempfile.TemporaryDirectory(prefix="aime-codex-protocol-") as temp:
     executable = pathlib.Path(temp) / "check"
     subprocess.run([

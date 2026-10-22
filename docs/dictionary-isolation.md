@@ -68,9 +68,9 @@
 - 文字词条模型与订阅：`Packages/AIMEKit/Sources/AIMECore/VocabularySubscriptions.swift`。
 - 文字词库生成与挂载：`Packages/AIMEKit/Sources/AIMECore/LocalCustomization/LocalVocabularyCustomization.swift`。
 - 文字工作目录与备份：`AIMECore/AIMEPaths.swift`、`AIMECore/Backup.swift`。
-- 语音词典与持久化：`Packages/AIMEKit/Sources/AIMEVoice/VoiceVocabulary.swift`、`VoiceSettings.swift`。
+- 语音词典与持久化：`Packages/AIMEVoiceKit/Sources/AIMEVoice/VoiceVocabulary.swift`、`VoiceSettings.swift`。
 - 语音生效路径：`AIMEVoice/VoiceRecognitionSession.swift`、`VoiceTranscriber.swift`、`VoiceProcessor.swift`。
 - 独立设置入口：`Apps/AIMESettings/Views/RootView.swift`、`LibraryViews.swift` 与 `AIMEVoiceSettings/VoiceSettingsPane.swift`、`VoiceVocabularyEditor.swift`。
-- 语音提交：`Packages/AIMEKit/Sources/AIMEVoiceHost/VoiceCommitTarget.swift`、`VoiceFeature.swift`。
+- 语音提交：`Packages/AIMEVoiceKit/Sources/AIMEVoiceHost/VoiceCommitTarget.swift`、`VoiceFeature.swift`。
 
 词典存储路径、匹配顺序和文字词频学习保持原有机制，已有词典无需迁移。语音设置新增 `localSpeechModel` 字段，旧文件缺少该字段时使用 Whisper Small，原润色、决策、旧 ASR 配置与词典保留。新采音及本地识别属于源码变更，未构建或安装到本机 App；详见[FluidVoice 接入记录](fluidvoice-integration-assessment-2026-10-15.md)。

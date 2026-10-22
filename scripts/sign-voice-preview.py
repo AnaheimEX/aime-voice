@@ -22,7 +22,7 @@ BUNDLES = (
     ("Contents/Applications/AIME Settings.app", "app.zool.aime.voicepreview.settings",
      "Apps/AIMESettings/AIMESettings.entitlements"),
     ("Contents/XPCServices/AIME Voice.xpc", "app.zool.aime.voicepreview.service",
-     "Apps/AIMEVoiceService/AIMEVoice.entitlements"),
+     "Local/AIMEVoiceService/AIMEVoice.entitlements"),
     (".", "app.zool.inputmethod.aime.voicepreview", "Apps/AIME/AIME.entitlements"),
 )
 

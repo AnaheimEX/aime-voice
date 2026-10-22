@@ -35,7 +35,7 @@ def voice_dependency_flags(*, imports_only=False):
     global _dependency_flags
     if _dependency_flags is not None:
         return list(_dependency_flags[0 if imports_only else 1])
-    package = ROOT / "Packages/AIMEKit"
+    package = ROOT / "Packages/AIMEVoiceKit"
     scratch = package / ".build/voice-contracts"
     # Standalone checks consume native SwiftPM's Modules/*.build layout.
     run("swift", "build", "--build-system", "native", "--package-path", package, "--scratch-path", scratch,
@@ -85,7 +85,7 @@ def voice_dependency_flags(*, imports_only=False):
 
 def main():
     dependencies = voice_dependency_flags()
-    sources = sorted((ROOT / "Packages/AIMEKit/Sources/AIMEVoice").glob("*.swift"))
+    sources = sorted((ROOT / "Packages/AIMEVoiceKit/Sources/AIMEVoice").glob("*.swift"))
     if len(sys.argv) == 3 and sys.argv[1] == "--compile-routing":
         run("swiftc", "-swift-version", "6", "-parse-as-library", *dependencies, *sources,
             "scripts/tests/VoiceRoutingCheck.swift", "-o", sys.argv[2])
@@ -101,16 +101,16 @@ def main():
             "-o", output / "libAIMEVoice.dylib")
         run("swiftc", "-swift-version", "6", "-parse-as-library", *voice_dependency_flags(imports_only=True), "-I", output, "-L", output,
             "-lAIMEVoice", "-Xlinker", "-rpath", "-Xlinker", output,
-            "Packages/AIMEKit/Sources/AIMEVoiceHost/VoiceServiceBridge.swift", "scripts/tests/VoiceBridgeLifecycleCheck.swift",
+            "Packages/AIMEVoiceKit/Sources/AIMEVoiceHost/VoiceServiceBridge.swift", "scripts/tests/VoiceBridgeLifecycleCheck.swift",
             "-o", output / "bridge-check")
         run(output / "bridge-check")
         run("swiftc", "-swift-version", "6", "-parse-as-library", *dependencies,
-            "Packages/AIMEKit/Sources/AIMEVoice/VoiceRecorder.swift",
-            "Packages/AIMEKit/Sources/AIMEVoice/FluidVoiceCapture.swift",
+            "Packages/AIMEVoiceKit/Sources/AIMEVoice/VoiceRecorder.swift",
+            "Packages/AIMEVoiceKit/Sources/AIMEVoice/FluidVoiceCapture.swift",
             "scripts/tests/VoiceRecorderLifecycleCheck.swift", "-o", output / "recorder-check")
         run(output / "recorder-check")
         run("swiftc", "-swift-version", "6", "-typecheck", *voice_dependency_flags(imports_only=True), "-I", output,
-            "Apps/AIMEVoiceService/main.swift")
+            "Local/AIMEVoiceService/main.swift")
         print("PASS service interface typecheck (not launched)")
 
 

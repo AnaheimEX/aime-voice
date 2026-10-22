@@ -285,7 +285,7 @@ def main():
     with tempfile.TemporaryDirectory(prefix="aime-laya-contract-") as temporary:
         executable = args.executable.resolve() if args.executable else Path(temporary) / "VoiceLayaCheck"
         if not args.python_only and args.executable is None:
-            sources = sorted((ROOT / "Packages/AIMEKit/Sources/AIMEVoice").glob("*.swift"))
+            sources = sorted((ROOT / "Packages/AIMEVoiceKit/Sources/AIMEVoice").glob("*.swift"))
             compilation = subprocess.run(["swiftc", "-swift-version", "6", "-parse-as-library", *voice_dependency_flags(), *map(str, sources),
                                           str(ROOT / "scripts/tests/VoiceLayaCheck.swift"), "-o", str(executable)],
                                          cwd=ROOT, capture_output=True, text=True)

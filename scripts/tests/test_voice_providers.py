@@ -181,7 +181,7 @@ class Handler(BaseHTTPRequestHandler):
 
 with tempfile.TemporaryDirectory(prefix="aime-provider-contract-") as temp:
     executable = Path(temp) / "check"
-    sources = sorted((ROOT / "Packages/AIMEKit/Sources/AIMEVoice").glob("*.swift"))
+    sources = sorted((ROOT / "Packages/AIMEVoiceKit/Sources/AIMEVoice").glob("*.swift"))
     subprocess.run(["swiftc", "-swift-version", "6", "-parse-as-library", *voice_dependency_flags(), *map(str, sources),
                     str(ROOT / "scripts/tests/VoiceProviderCheck.swift"), "-o", str(executable)], check=True, cwd=ROOT)
     with ThreadingHTTPServer(("127.0.0.1", 0), Handler) as server, \

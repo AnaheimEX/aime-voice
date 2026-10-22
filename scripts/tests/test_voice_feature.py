@@ -8,7 +8,7 @@ with tempfile.TemporaryDirectory(prefix="aime-feature-") as tmp:
     out = Path(tmp)
     dependencies = voice_dependency_flags()
     for module in ("AIMEVoice", "AIMEVoiceHost"):
-        sources = sorted((ROOT / "Packages/AIMEKit/Sources" / module).glob("*.swift"))
+        sources = sorted((ROOT / "Packages/AIMEVoiceKit/Sources" / module).glob("*.swift"))
         args = ["swiftc", "-swift-version", "6", "-parse-as-library", "-emit-library", "-emit-module", "-module-name", module, "-emit-module-path", str(out / (module + ".swiftmodule")), "-I", tmp, "-L", tmp]
         if module == "AIMEVoiceHost": args += [*voice_dependency_flags(imports_only=True), "-lAIMEVoice"]
         else: args += dependencies

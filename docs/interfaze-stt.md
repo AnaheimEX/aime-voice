@@ -10,7 +10,7 @@
 
 验证：独立编译真实适配器，并执行有效中文结果与四种拒绝情况（截断、缺少结构、空文本、错误任务名），全部通过。配置、会话及 SwiftUI 修改仅完成语法解析，未完成整个模块类型检查或 App 构建。真实调用在发出前被自动审批拒绝，原因是命令中出现明文密钥；未绕过，尚无网络连通性、账户额度或识别质量结论。用户提供的密钥未写入源码或本地配置。
 
-受保护输入可使用本机终端隐藏输入，经标准输入传给既有独立检查程序，不把密钥放入命令参数、脚本或 shell 历史。检查程序：`../dist/.voice57-0N79at/interfaze-check`；固定音频：`Packages/AIMEKit/Sources/AIMEVoiceSettings/Resources/VoiceConnectionTest.wav`。
+受保护输入可使用本机终端隐藏输入，经标准输入传给既有独立检查程序，不把密钥放入命令参数、脚本或 shell 历史。检查程序：`../dist/.voice57-0N79at/interfaze-check`；固定音频：`Packages/AIMEVoiceKit/Sources/AIMEVoiceSettings/Resources/VoiceConnectionTest.wav`。
 
 文档来源：
 - https://interfaze.ai/docs/audio/speech-to-text

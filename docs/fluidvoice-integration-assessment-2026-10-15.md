@@ -18,7 +18,7 @@ AIME 当前链路为：
 4. `VoiceProcessor.process` 执行润色等文字处理及格式整理，随后统一对最终文字应用语音纠错规则。
 5. `AIMEVoiceHost` 校验输入目标并提交结果，不经过 Rime 选词或学词。
 
-本地依据：`Packages/AIMEKit/Sources/AIMEVoice/VoiceRuntime.swift`、`VoiceRecorder.swift`、`VoiceRecognitionSession.swift`、`VoiceTranscriber.swift`、`VoiceProcessor.swift`，以及 `AIMEVoiceHost/VoiceCommitTarget.swift`。
+本地依据：`Packages/AIMEVoiceKit/Sources/AIMEVoice/VoiceRuntime.swift`、`VoiceRecorder.swift`、`VoiceRecognitionSession.swift`、`VoiceTranscriber.swift`、`VoiceProcessor.swift`，以及 `AIMEVoiceHost/VoiceCommitTarget.swift`。
 
 FluidVoice 的 `TranscriptionProvider` 接口接受 **16 kHz 单声道 Float PCM 数组**，区分 `prepare`、`transcribeStreaming`、`transcribeFinal` 和模型清理；它不是可直接代入 AIME 当前会话接口的类型。需要在识别层转换 Int16 到 Float，并适配准备、增量输入、停止收尾、取消和结果回传。首次模型下载、加载和 CoreML 编译不能阻塞 IMK 按键回调。[3]
 

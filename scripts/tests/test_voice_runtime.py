@@ -17,7 +17,7 @@ def run(*args):
 
 def main():
     dependencies = voice_dependency_flags()
-    sources = sorted((ROOT / "Packages/AIMEKit/Sources/AIMEVoice").glob("*.swift"))
+    sources = sorted((ROOT / "Packages/AIMEVoiceKit/Sources/AIMEVoice").glob("*.swift"))
     with tempfile.TemporaryDirectory(prefix="aime-voice-runtime-") as directory:
         output = Path(directory)
         run("swiftc", "-swift-version", "6", "-enable-upcoming-feature", "InternalImportsByDefault",
@@ -29,7 +29,7 @@ def main():
             "scripts/tests/VoiceRuntimeCheck.swift", "-o", output / "runtime-check")
         run(output / "runtime-check")
         run("swiftc", "-swift-version", "6", "-typecheck", *voice_dependency_flags(imports_only=True), "-I", output,
-            "Apps/AIMEVoiceService/main.swift")
+            "Local/AIMEVoiceService/main.swift")
         print("PASS XPC entry typecheck (not launched)")
 
 
