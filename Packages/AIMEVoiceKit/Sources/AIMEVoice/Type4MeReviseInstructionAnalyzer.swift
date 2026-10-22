@@ -4,6 +4,9 @@
 // SPDX-License-Identifier: MIT
 // Full license: licenses/type4me.LICENSE.txt (repository root).
 // AIME adaptation: public Foundation import for AIME strict Swift settings.
+// Spoken tails (sentence-final particles, polite closers, "then send it") are kept out of
+// replacement values, and instructions that name the whole selection or a language never
+// become literal replacements; the model handles those instead.
 
 public import Foundation
 
@@ -65,6 +68,36 @@ public enum ReviseInstructionAnalyzer {
         guard example.count >= 2, character.count == 1,
               example.contains(character), character.range(of: #"^\p{Han}$"#, options: .regularExpression) != nil else { return nil }
         return String(character)
+    }
+
+    private static let sentenceFinalParticles = Set("吧啊呀哦喔嘛呗呢啦咯")
+    private static let languageNames: Set<String> = [
+        "英文", "英语", "中文", "汉语", "日文", "日语", "法文", "法语", "德文", "德语", "韩文", "韩语", "西班牙语",
+    ]
+    /// Words that point at the whole selection. "把它改成英文" never means the literal "它".
+    private static let wholeSelectionReferences: Set<String> = [
+        "它", "这句", "这句话", "这段", "这段话", "整句", "整句话", "整段", "整段话", "全文", "全部", "全部内容", "这里", "此处",
+    ]
+    /// Closers a speaker adds after a value. Each pattern is anchored at the end and only applied
+    /// when something remains, so a value that is itself one of these words is left alone.
+    private static let spokenTailPatterns = [
+        #"(?:并且?|然后|之后|接着|再|并直接|然后直接)(?:发送|发出去|发出|提交|发给.+)$"#,
+        #"(?:就(?:行|好|可以|成)了?|即可|谢谢|多谢|麻烦(?:你)?了|拜托了|好吗|行吗|可以吗|对吗|好不好|行不行|可不可以|就这样)[吧啊呀哦嘛呗啦]*$"#,
+    ]
+
+    /// `allowingEmpty` is for text that already follows a structured fact, where a closer may be all that is left.
+    private static func strippingSpokenTail(_ value: String, allowingEmpty: Bool = false) -> String {
+        var current = value
+        for _ in 0..<3 {
+            var changed = false
+            for pattern in spokenTailPatterns {
+                guard let range = current.range(of: pattern, options: .regularExpression) else { continue }
+                let rest = String(current[..<range.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
+                if !rest.isEmpty || allowingEmpty { current = rest; changed = true }
+            }
+            if !changed { break }
+        }
+        return current
     }
 
     public static func analyze(_ instruction: String, targetText: String = "") -> ReviseInstructionAnalysis {
@@ -145,8 +178,18 @@ public enum ReviseInstructionAnalyzer {
                    match.numberOfRanges >= 3,
                    let r1 = Range(match.range(at: 1), in: trimmed),
                    let r2 = Range(match.range(at: 2), in: trimmed) {
-                    var oldVal = unquotedLiteral(String(trimmed[r1]))
-                    var newVal = unquotedLiteral(String(trimmed[r2]))
+                    let rawOld = String(trimmed[r1]).trimmingCharacters(in: .whitespacesAndNewlines)
+                    let rawNew = String(trimmed[r2]).trimmingCharacters(in: .whitespacesAndNewlines)
+                    var oldVal = unquotedLiteral(rawOld)
+                    var newVal = unquotedLiteral(rawNew)
+                    // A quoted value is exactly what the speaker meant; only bare values carry spoken tails.
+                    if newVal == rawNew {
+                        newVal = strippingSpokenTail(newVal)
+                        // "后天吧" is a value plus a particle, "咖啡吧" is one noun. Only the model can tell.
+                        if let last = newVal.last, sentenceFinalParticles.contains(last) { continue }
+                    }
+                    // "改成英文" asks for a translation and "这句话/它" is the selection itself, not text to find.
+                    if languageNames.contains(newVal) || (oldVal == rawOld && wholeSelectionReferences.contains(oldVal)) { continue }
                     if !targetText.contains(oldVal), let character = explainedCharacter(oldVal) {
                         oldVal = character
                     }
@@ -291,7 +334,9 @@ public enum ReviseInstructionAnalyzer {
         var remainder = value
         remainder.removeSubrange(fact.range)
         let ignorable = CharacterSet.whitespacesAndNewlines.union(.punctuationCharacters)
-        guard remainder.unicodeScalars.allSatisfy({ ignorable.contains($0) }) else { return value }
+        // After a structured fact a particle or polite closer cannot be part of the value.
+        let rest = strippingSpokenTail(remainder.trimmingCharacters(in: ignorable), allowingEmpty: true).trimmingCharacters(in: ignorable)
+        guard rest.allSatisfy({ sentenceFinalParticles.contains($0) }) else { return value }
         return fact.text
     }
 }

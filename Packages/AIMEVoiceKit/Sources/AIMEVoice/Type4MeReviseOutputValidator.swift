@@ -5,6 +5,7 @@
 // Full license: licenses/type4me.LICENSE.txt (repository root).
 // AIME adaptation: public Foundation import for AIME strict Swift settings.
 // The existing local replacement helper is module-internal for VoiceRewriteEngine.
+// A completion phrase such as "已发送" only counts as the model claiming execution when the selection lacks it.
 
 public import Foundation
 
@@ -198,7 +199,7 @@ public enum ReviseOutputValidator {
                 warnings: warnings
             )
         }
-        if claimsExecution(candidate) {
+        if claimsExecution(candidate, target: request.targetText) {
             return rejectResult(
                 request: request,
                 response: response,
@@ -431,10 +432,11 @@ public enum ReviseOutputValidator {
         return false
     }
 
-    private static func claimsExecution(_ candidate: String) -> Bool {
+    private static func claimsExecution(_ candidate: String, target: String) -> Bool {
         let claims = ["已经为你发送", "已为你发送", "操作完成", "部署完成", "发送成功", "已发送", "创建成功", "done", "completed successfully"]
         let lower = candidate.lowercased()
-        return claims.contains { lower.contains($0.lowercased()) }
+        let lowerTarget = target.lowercased()
+        return claims.contains { lower.contains($0.lowercased()) && !lowerTarget.contains($0.lowercased()) }
     }
 
     private static func didChangePrimaryScript(target: String, candidate: String) -> Bool {

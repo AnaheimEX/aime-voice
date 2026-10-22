@@ -47,6 +47,35 @@ import Foundation
         try require(literalDe.text == "这是你的书", "ordinary 的 phrases must remain literal")
         print("PASS 3 spoken character corrections and literal 的 phrase")
 
+        // Spoken tails must not leak into a deterministic replacement; ambiguous ones go to the model.
+        func deterministic(_ target: String, _ instruction: String) throws -> String? {
+            try VoiceRewriteEngine.localCandidate(for: VoiceRewriteEngine.makeRequest(target, instruction: instruction))
+        }
+        let meeting = "我们明天见面"
+        for instruction in ["帮我把明天改成后天。", "把明天改成后天就行。", "把明天改成后天然后发送", "把明天改成后天，谢谢"] {
+            let result = try deterministic(meeting, instruction)
+            try require(result == "我们后天见面", "spoken tail must stay out of the value: \(instruction)")
+        }
+        for instruction in ["帮我把明天改成后天吧。", "把明天改成后天啊"] {
+            let result = try deterministic(meeting, instruction)
+            try require(result == nil, "a trailing particle is ambiguous and needs the model: \(instruction)")
+        }
+        let cases: [(target: String, instruction: String, expected: String?, reason: String)] = [
+            ("去咖啡厅坐坐", "把咖啡厅改成咖啡吧", nil, "a noun ending in 吧 must not be silently cut to 咖啡"),
+            ("会议在下午两点开始", "改成下午3点吧。", "会议在下午3点开始", "particle after a time value"),
+            ("会议在下午两点开始", "改成下午3点就行了", "会议在下午3点开始", "closer after a time value"),
+            ("它的价格太高了", "把它改成英文", nil, "translation request must not replace the pronoun"),
+            ("这个价格太高了。", "把这句话改成英文", nil, "whole-selection reference must reach the model"),
+            ("点击提交按钮", "把提交改成发送", "点击发送按钮", "a value that is itself 发送 stays literal"),
+            (meeting, "把明天改成“后天吧”", "我们后天吧见面", "a quoted value is taken exactly"),
+            ("邮件已发送，请查收", "把查收改成确认", "邮件已发送，请确认", "text that already says 已发送 is not an execution claim"),
+        ]
+        for item in cases {
+            let result = try deterministic(item.target, item.instruction)
+            try require(result == item.expected, "\(item.reason): \(item.instruction) -> \(result ?? "nil")")
+        }
+        print("PASS spoken tails, particles and whole-selection references in rewrite instructions")
+
         let request = VoiceRequest(sessionID: "rewrite-session", settings: settings, rewriteText: selected)
         let decodedRequest = try JSONDecoder().decode(VoiceRequest.self, from: JSONEncoder().encode(request))
         try require(decodedRequest.rewriteText == selected, "selection must survive request encoding")
