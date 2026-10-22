@@ -56,6 +56,10 @@ except BaseException:
     raise
 if current:
     subprocess.run([str(helper), "select", current], check=True)
+# The staged copy shares the bundle id. If LaunchServices keeps it, imklaunchagent can
+# resolve the input method to that copy and fail to launch it (status -50).
+subprocess.run(["/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister",
+                "-u", str(stage)])
 subprocess.run(["open", "-a", str(installed)], check=True)
 subprocess.run(["open", str(installed / "Contents/Applications/AIME Settings.app")], check=True)
 print("Installed Build" + new_version + ("; first install" if previous is None else "; previous Build" + old_version + " retained at " + str(previous)))
