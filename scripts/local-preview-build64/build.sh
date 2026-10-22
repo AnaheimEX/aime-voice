@@ -50,6 +50,9 @@ CLI="$(swift build --build-system native --package-path Packages/AIMEKit -c rele
 echo "==> staging and signing"
 mkdir -p "$OUT"
 python3 "$HERE/stage.py" "$ROOT" "$DERIVED/Build/Products/Release" "$REFERENCE" "$APP" "$CLI" --build "$BUILD"
+# A copied-in source tree or reference keeps Gatekeeper quarantine; macOS will not register a
+# quarantined, self-signed input method.
+xattr -dr com.apple.quarantine "$APP"
 python3 "$HERE/sign-nested.py" "$APP"
 python3 "$HERE/sign-local.py" "$APP" "$REFERENCE" "$ROOT"
 # Signing scratch next to the app: entitlement files and verified framework duplicates.

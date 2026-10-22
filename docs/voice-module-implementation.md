@@ -8,6 +8,7 @@
 - `build.sh` 新增 `AIME_PREVIEW_REFERENCE`，这次用 `../dist/Build71` 作参考包；`install.py` 支持首次安装。xcodegen 2.46.0 从官方发行版装到 `~/.local/bin`。Xcode 27.1 已同意许可并完成 `-runFirstLaunch`。
 - 用 Xcode 工具链补跑了上次跑不了的检查：`swift build`、`swift test`（11 项）和 VoiceFeature 检查都通过，其余结果与拆分时相同。两项失败仍是原来的：Laya 检查的 Python 评估部分，以及 CI 原生上屏检查命令找不到 `AIMEVoice` 模块。
 - `build.sh 72 --install` 完成。三个组件均为 Build72，完整包签名严格验证通过，主程序和设置已启动，输入源已注册启用，原输入源 `com.apple.inputmethod.SCIM.ITABC` 已恢复。构建日志仍有以往的 SwiftCompile “exit code 0” 提示。安装后发现 22:35 曾从 `dist/Build71` 直接打开过一个 Build71 进程（系统 App Translocation），已经停止。
+- 第一次安装后输入法没有出现在菜单里：项目文件和 `dist/Build71` 都带着 `com.apple.quarantine`，被复制进了 App（154 个文件），系统不会注册被隔离的自签名输入法。去掉已安装 App 和项目文件的隔离属性后重新注册，`app.zool.inputmethod.aime.voicepreview.hans` 已启用、可选择。签名不受影响。`build.sh` 在签名前增加了 `xattr -dr com.apple.quarantine`。
 - 这台机器上没有 `~/Library/Application Support/AIME`，所以没有语音设置、模型或 ChatGPT 登录，需要在设置里重新配置。没有做真人录音验收。
 
 ## 2026-10-22 拆分大文件（Build72 已安装）
