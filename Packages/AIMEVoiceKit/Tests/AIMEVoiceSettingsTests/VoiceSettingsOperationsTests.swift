@@ -49,6 +49,40 @@ final class VoiceSettingsOperationsTests: XCTestCase {
         }
     }
 
+    func testUnknownEnumValueKeepsTheRestOfTheFileReadable() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let url = root.appendingPathComponent("settings.json")
+        // As written by a build that knows more values than this one.
+        let written = #"{"speechBackend":"quantum","localSpeechModel":"future-model","polishStyle":"poem","targetLanguage":"法文","interfazeAPIKey":"fixture-key"}"#
+        try Data(written.utf8).write(to: url)
+        let loaded = VoiceSettings.load(from: url)
+        XCTAssertEqual(loaded.speechBackend, .local)
+        XCTAssertEqual(loaded.targetLanguage, "法文")
+        XCTAssertEqual(loaded.interfazeAPIKey, "fixture-key")
+    }
+
+    func testSavingNeverDiscardsAFileThisBuildCannotRead() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let url = root.appendingPathComponent("settings.json")
+        let unreadable = #"{"llm":{"apiKey":"precious-key"},"vocabulary":"not an object"}"#
+        try Data(unreadable.utf8).write(to: url)
+        XCTAssertEqual(VoiceSettings.load(from: url), VoiceSettings())
+        try VoiceSettings().save(to: url)
+        let backups = try FileManager.default.contentsOfDirectory(atPath: root.path).filter { $0.hasPrefix("voice-settings.unreadable-") }
+        XCTAssertEqual(backups.count, 1)
+        let kept = try Data(contentsOf: root.appendingPathComponent(backups[0]))
+        XCTAssertEqual(String(decoding: kept, as: UTF8.self), unreadable)
+        let mode = try FileManager.default.attributesOfItem(atPath: root.appendingPathComponent(backups[0]).path)[.posixPermissions] as? NSNumber
+        XCTAssertEqual(mode?.intValue, 0o600)
+        // A readable file is replaced as before, without leaving more copies.
+        try VoiceSettings().save(to: url)
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: root.path).filter { $0.hasPrefix("voice-settings.unreadable-") }.count, 1)
+    }
+
     func testDictionaryDraftAndAllRoleProfilesSurviveConfigurationRoundTrip() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)

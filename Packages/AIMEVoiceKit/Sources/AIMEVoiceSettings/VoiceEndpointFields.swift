@@ -176,7 +176,9 @@ struct VoiceEndpointFields: View {
     private func choose(_ preset: VoiceProviderPreset) {
         guard self.preset?.id != preset.id || endpoint.resolvedProtocol != preset.endpoint.resolvedProtocol else { return }
         showingAPIKey = false
-        endpoint = profiles.select(preset, current: endpoint, inferredID: self.preset?.id)
+        // A URL typed while the menu still says "自定义配置" is the custom preset's; keep it for switching back.
+        let typedCustom = purpose != .decision && !endpoint.baseURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        endpoint = profiles.select(preset, current: endpoint, inferredID: self.preset?.id ?? (typedCustom ? "openai-custom" : nil))
         if purpose == .decision { decisionProtocol = preset.decisionProtocol }
         reset()
     }

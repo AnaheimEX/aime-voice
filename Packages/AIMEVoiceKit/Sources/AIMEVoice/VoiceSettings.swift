@@ -142,6 +142,17 @@ public struct VoiceSettings: Codable, Sendable, Equatable {
 
     public func save() throws { try save(to: Self.settingsURL) }
 
+    /// `load` falls back to defaults for a file it cannot decode, so saving would silently replace the
+    /// API keys, profiles and dictionary inside it. Keep that file next to the new one first.
+    private static func preserveUnreadableFile(at url: URL) {
+        guard let existing = try? Data(contentsOf: url),
+              (try? JSONDecoder().decode(Self.self, from: existing)) == nil else { return }
+        let backup = url.deletingLastPathComponent()
+            .appendingPathComponent("voice-settings.unreadable-\(Int(Date().timeIntervalSince1970)).json")
+        guard (try? existing.write(to: backup, options: .withoutOverwriting)) != nil else { return }
+        chmod(backup.path, 0o600)
+    }
+
     public func save(to url: URL) throws {
         try vocabulary.validate()
         try VoiceShortcutConfiguration.validate(toggle: toggleShortcut, cancel: cancelShortcut, rewrite: rewriteShortcut)
@@ -149,6 +160,7 @@ public struct VoiceSettings: Codable, Sendable, Equatable {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true,
                                                 attributes: [.posixPermissions: 0o700])
         try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: directory.path)
+        Self.preserveUnreadableFile(at: url)
         let data = try JSONEncoder().encode(self)
         let temporary = directory.appendingPathComponent(".voice-settings-\(UUID().uuidString)")
         let descriptor = open(temporary.path, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW, mode_t(0o600))
@@ -186,9 +198,11 @@ public struct VoiceSettings: Codable, Sendable, Equatable {
         cancelShortcut = try container.decodeIfPresent(String.self, forKey: .cancelShortcut) ?? cancelShortcut
         rewriteShortcut = try container.decodeIfPresent(String.self, forKey: .rewriteShortcut) ?? rewriteShortcut
         recordingGesture = try container.decodeIfPresent(String.self, forKey: .recordingGesture) ?? recordingGesture
-        speechBackend = try container.decodeIfPresent(VoiceSpeechBackend.self, forKey: .speechBackend) ?? speechBackend
+        // An unknown enum value (written by a newer build, or edited by hand) falls back to the default
+        // instead of making the whole file, API keys included, unreadable.
+        speechBackend = (try? container.decodeIfPresent(VoiceSpeechBackend.self, forKey: .speechBackend)) ?? speechBackend
         interfazeAPIKey = try container.decodeIfPresent(String.self, forKey: .interfazeAPIKey) ?? interfazeAPIKey
-        localSpeechModel = try container.decodeIfPresent(LocalSpeechModel.self, forKey: .localSpeechModel) ?? localSpeechModel
+        localSpeechModel = (try? container.decodeIfPresent(LocalSpeechModel.self, forKey: .localSpeechModel)) ?? localSpeechModel
         asr = try container.decodeIfPresent(VoiceEndpoint.self, forKey: .asr) ?? asr
         llm = try container.decodeIfPresent(VoiceEndpoint.self, forKey: .llm) ?? llm
         asrProfiles = try container.decodeIfPresent(VoiceProviderProfiles.self, forKey: .asrProfiles) ?? asrProfiles
@@ -198,7 +212,7 @@ public struct VoiceSettings: Codable, Sendable, Equatable {
         targetLanguage = try container.decodeIfPresent(String.self, forKey: .targetLanguage) ?? targetLanguage
         customPrompt = try container.decodeIfPresent(String.self, forKey: .customPrompt) ?? customPrompt
         polishPrompt = try container.decodeIfPresent(String.self, forKey: .polishPrompt) ?? polishPrompt
-        polishStyle = try container.decodeIfPresent(VoicePolishStyle.self, forKey: .polishStyle) ?? effectivePolishStyle
+        polishStyle = (try? container.decodeIfPresent(VoicePolishStyle.self, forKey: .polishStyle)) ?? effectivePolishStyle
         decisionMode = try container.decodeIfPresent(String.self, forKey: .decisionMode) ?? decisionMode
         decisionProtocol = try container.decodeIfPresent(String.self, forKey: .decisionProtocol) ?? decisionProtocol
         decisionBudgetMilliseconds = try container.decodeIfPresent(Int.self, forKey: .decisionBudgetMilliseconds) ?? decisionBudgetMilliseconds

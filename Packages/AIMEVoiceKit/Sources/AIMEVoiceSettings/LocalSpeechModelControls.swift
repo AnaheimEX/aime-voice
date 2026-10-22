@@ -45,7 +45,7 @@ struct LocalSpeechModelControls: View {
             }
             Text("录音与识别在本机完成。Cohere 使用普通话；Whisper 自动识别语言，支持中文及中英混说。模型按需从 Hugging Face 下载，首次加载或 Core ML 编译可能较慢。")
                 .font(.caption).foregroundStyle(.secondary)
-            Text("当前本地后端不使用识别热词；语音词典的最终文字替换仍在润色和决策完成后生效。润色、翻译与决策继续使用下方所选服务。")
+            Text("当前本地后端不使用识别热词；语音词典的纠错规则仍在润色前替换一次。润色、翻译与决策继续使用下方所选服务。")
                 .font(.caption).foregroundStyle(.secondary)
         }
         .onAppear { installed = model.isDownloaded }

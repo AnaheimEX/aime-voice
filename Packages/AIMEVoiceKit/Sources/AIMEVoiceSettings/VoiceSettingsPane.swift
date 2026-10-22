@@ -75,7 +75,7 @@ public struct VoiceSettingsPane: View {
                     VoiceEndpointFields(endpoint: $settings.asr, profiles: $settings.asrProfiles, purpose: .speech)
                 } else {
                     SecureField("Interfaze API Key", text: $settings.interfazeAPIKey)
-                    Text("使用 interfaze-1 纯语音识别。停录后将音频发送至 Interfaze，并请求零数据保留；按服务额度计费。润色、决策和最终词典替换继续使用当前设置。")
+                    Text("使用 interfaze-1 纯语音识别。停录后将音频发送至 Interfaze，并请求零数据保留；按服务额度计费。词典纠错、润色和决策继续使用当前设置。")
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 VoiceModelTestControls(settings: settings, kind: .speech)

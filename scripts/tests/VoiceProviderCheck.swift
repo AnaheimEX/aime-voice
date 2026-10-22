@@ -165,6 +165,13 @@ struct VoiceProviderCheck {
         let clip = RecordedAudio(wav: Data(repeating: 0, count: 64), duration: 1)
         let customText = try await VoiceTranscriber().transcribe(clip, settings: speechSettings)
         try require(customText == "测试GitHub123", "custom STT transcript changed")
+        // The API key and the whole recording travel in this request: plain http is only for this Mac or the local network.
+        var remoteHTTP = speechSettings
+        remoteHTTP.asr.baseURL = "http://stt.example.invalid/v1"
+        do {
+            _ = try await VoiceTranscriber().transcribe(clip, settings: remoteHTTP)
+            try require(false, "custom STT accepted plain http to a remote host")
+        } catch VoiceTranscriptionError.invalidConfiguration {}
         speechSettings.asr = fish.endpoint
         speechSettings.asr.baseURL = CommandLine.arguments[1] + "/compat/v1"
         speechSettings.asr.apiKey = "synthetic-fish-key"

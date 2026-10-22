@@ -208,7 +208,7 @@ enum VoiceHTTP {
         return data
     }
 
-    private static func isLocalHost(_ host: String) -> Bool {
+    static func isLocalHost(_ host: String) -> Bool {
         if ["localhost", "127.0.0.1", "::1", "[::1]"].contains(host) || host.hasSuffix(".local") { return true }
         let parts = host.split(separator: ".").compactMap { Int($0) }
         guard parts.count == 4, parts.allSatisfy({ (0...255).contains($0) }) else { return false }

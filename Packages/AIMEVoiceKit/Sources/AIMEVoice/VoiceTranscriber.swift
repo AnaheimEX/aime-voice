@@ -5,7 +5,7 @@ public enum VoiceTranscriptionError: LocalizedError, Sendable {
 
     public var errorDescription: String? {
         switch self {
-        case .invalidConfiguration: "请填写语音识别服务的 HTTP API 地址和模型 ID"
+        case .invalidConfiguration: "请填写语音识别服务的 HTTP API 地址和模型 ID；远程地址必须使用 HTTPS"
         case .emptyRecording: "录音过短或没有录到声音"
         case .tooLong: "单次录音不能超过 5 分钟"
         case .invalidResponse: "语音识别服务返回了无法解析的响应"
@@ -152,7 +152,9 @@ public struct VoiceTranscriber: Sendable {
               let scheme = components.scheme?.lowercased(), ["http", "https"].contains(scheme),
               let host = components.host, !host.isEmpty,
               components.user == nil, components.password == nil,
-              components.query == nil, components.fragment == nil else { return nil }
+              components.query == nil, components.fragment == nil,
+              // The API key and the whole recording travel with this request: same rule as VoiceHTTP.
+              scheme == "https" || VoiceHTTP.isLocalHost(host) else { return nil }
         var path = components.path
         while path.hasSuffix("/") { path.removeLast() }
         if !path.hasSuffix("/audio/transcriptions") {
