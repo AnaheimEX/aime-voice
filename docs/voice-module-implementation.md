@@ -2,6 +2,18 @@
 
 更新日期：2026-10-22。本地 `main` 已合并上游 0.1.10，并按[与上游同步](upstream-merge.md)重整为三层：本地文件、上游文件里的白名单挂钩、`project.local.yml` 构建入口。当前本机预览已安装 **Build71**（0.1.10，CFBundleVersion 71）。最新完整产物为 `../dist/Build71/AIME Voice Preview.app`，2026-10-22 按用户要求删除全部旧版本产物与回退包（Build69、Build70）、`~/Library/Input Methods` 中的旧签名临时文件，并把旧版工作区 `~/Library/AIME` 移到废纸篓；当前预览数据 `~/Library/AIME Voice Preview` 和 `~/Library/Application Support/AIME` 保留。下方为本次结果与历史记录。
 
+## 2026-10-22 拆分大文件（源码，未构建安装）
+
+- 只做文件拆分，不改行为。新文件都放在原模块目录的顶层，因为 `scripts/tests` 的检查只编译 `Sources/AIMEVoice/*.swift`。
+  - `VoiceProcessor` 拆为入口与结果类型（`VoiceProcessor.swift`）、润色提示词和本地规则（`VoicePolishRules.swift`）、主润色与决策／hedge 竞速（`VoicePolishPipeline.swift`）、模型请求（`VoiceTextCompletion.swift`）、决策分类与 Laya（`VoicePolishDecision.swift`）。
+  - `CohereRecognitionEngine` 的 MLMultiArray 辅助函数和 `FastFeatureProvider` 移到 `CohereMLArrays.swift`，推理主体不动，便于与 FluidAudio 对照；许可来源表已补上新文件。
+  - `CodexSubscriptionClient` 拆出 Responses 流式请求与解析（`CodexResponsesStream.swift`）和 ID token 校验（`CodexIDTokenVerification.swift`）。`test_codex_subscription.py` 的编译清单已加入这两个文件。
+  - `VoiceSettingsPane` 的接口配置字段和润色提示词编辑器各成一个文件。
+- 跨文件使用的成员由 `private` 改为模块内 `internal`，公开接口不变。延迟日志里重复的毫秒换算统一为 `Duration.wholeMilliseconds`，和原来一样截断取整。按词比对新旧源码，除导入、extension 包装、注释和这两类改动外没有差异。
+- 本机没有 Xcode（`xcode-select` 指向 CommandLineTools，也没有 xcodegen），所以 `swift build`／`swift test`、`test_voice_feature.py` 和 `AIMEVoiceSettings` 都因缺少 SwiftUI 宏插件无法编译。设置页的三个文件只做了 `swiftc -parse`。`build.sh 72 --install` 没有运行，本机仍为 Build71。
+- 拆分前后都通过：路由（92 次本机请求，无错误）、改写（12 次）、录音生命周期、Runtime、提供方、Laya 的 Swift 部分、Codex 协议和接缝检查。两次编译的唯一警告集合相同。`test_voice_laya.py` 的 Python 评估部分在拆分前就失败（`predict` 返回状态不是 `covered`），因此 Laya 的 Swift 部分是跳过该部分单独运行的。CI 中的原生上屏检查命令在拆分前就因找不到 `AIMEVoice` 模块而失败。
+- 项目从别处传入，`.build` 依赖缓存带 `com.apple.quarantine`，系统因此拒绝加载 CTranscribe。已只对 `Packages/AIMEVoiceKit/.build/voice-contracts/artifacts` 去除该属性，检查才能运行。
+
 ## 2026-10-22 热词接入与关闭决策（Build71 已安装）
 
 - 依据 10-21～10-22 的 22 次真实听写日志（只含耗时与路由）：停录后识别中位 482ms、润色中位 593ms；决策调用 11 次、预算内返回 1 次（768ms）、采纳 0 次；纠错命中 1 次；当前后端为本机 Whisper Small，11 个热词在识别和润色中都未被使用。

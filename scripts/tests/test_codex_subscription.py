@@ -11,6 +11,8 @@ with tempfile.TemporaryDirectory(prefix="aime-codex-protocol-") as temp:
     subprocess.run([
         "swiftc", "-swift-version", "6", "-parse-as-library",
         str(SOURCES / "CodexSubscriptionClient.swift"),
+        str(SOURCES / "CodexResponsesStream.swift"),
+        str(SOURCES / "CodexIDTokenVerification.swift"),
         str(SOURCES / "CodexOAuthCallbackListener.swift"),
         str(ROOT / "scripts/tests/CodexSubscriptionCheck.swift"),
         "-o", str(executable),
