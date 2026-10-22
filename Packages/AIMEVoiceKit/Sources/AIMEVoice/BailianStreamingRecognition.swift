@@ -130,7 +130,7 @@ final class BailianStreamingRecognition {
               let header = json["header"] as? [String: Any], let event = header["event"] as? String else {
             throw VoiceRecognitionError.invalidResponse
         }
-        if let id = header["task_id"] as? String, id != taskID { throw VoiceRecognitionError.invalidResponse }
+        if let id = header["task_id"] as? String, id.lowercased() != taskID.lowercased() { throw VoiceRecognitionError.invalidResponse }
         switch event {
         case "task-started":
             ready = .success(())

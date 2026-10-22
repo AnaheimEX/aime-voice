@@ -86,7 +86,8 @@ actor LocalSpeechRecognizer {
                 let prompt = try Self.mandarinPrompt(at: model.directory)
                 let manager = CohereRecognitionEngine()
                 try await manager.loadModels(from: model.directory, computeConfiguration: .aneSmall)
-                try Task.checkCancellation()
+                // Loading cannot be interrupted. Keep the result even if the session was cancelled meanwhile,
+                // so the next session does not load the model again.
                 cohere = manager
                 coherePrompt = prompt
                 #else
@@ -102,11 +103,11 @@ actor LocalSpeechRecognizer {
                 #endif
                 whisper = try Model(path: model.directory.appendingPathComponent(model.fileName).path,
                                     options: ModelOptions(backend: backend))
-                try Task.checkCancellation()
             }
             loadedModel = model
             let elapsed = Date().timeIntervalSince(startedAt) * 1000
             logger.notice("stage=localModelLoad model=\(model.rawValue, privacy: .public) elapsedMs=\(elapsed)")
+            try Task.checkCancellation()
         }
     }
 

@@ -92,7 +92,27 @@ struct VoiceRuntimeCheck {
         }
         fatalError("fixture did not reach expected state")
     }
+    /// Capture delivers ~10 ms chunks; the stream is bounded by element count, so they are repacked into 100 ms packets.
+    @MainActor static func streamingPCMIsRepackedIntoWholePackets() {
+        let packetizer = PCMPacketizer()
+        let chunk = Data((0..<340).map { UInt8($0 % 251) })
+        var sent = Data()
+        var packets: [Data] = []
+        for _ in 0..<300 {
+            sent.append(chunk)
+            packets += packetizer.packets(adding: chunk)
+        }
+        let tail = packetizer.remainder()
+        check(packets.count == 31 && packets.allSatisfy { $0.count == 3_200 },
+              "300 small chunks must become whole 100 ms packets, got \(packets.count)")
+        check(packets.count + 1 < 256, "ten seconds of audio must fit the 256-slot stream with room to spare")
+        check((packets.reduce(Data(), +) + (tail ?? Data())) == sent, "repacking must not lose or reorder audio")
+        check(packetizer.remainder() == nil, "the remainder is handed out once")
+    }
+
     @MainActor static func main() async throws {
+        streamingPCMIsRepackedIntoWholePackets()
+        print("PASS streaming PCM repacked into 100 ms packets without losing audio")
         let capture = Capture()
         var events: [VoiceEvent] = []
         let runtime = VoiceRuntime(capture: capture, makeRecognition: { _, _ in Recognition() },

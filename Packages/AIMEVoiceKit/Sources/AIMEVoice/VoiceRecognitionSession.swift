@@ -34,6 +34,7 @@ public final class VoiceRecognitionSession {
     private let bailian: BailianStreamingRecognition?
     private nonisolated let pcmContinuation: AsyncThrowingStream<Data, any Error>.Continuation
     private let pcmStream: AsyncThrowingStream<Data, any Error>
+    private nonisolated let packetizer = PCMPacketizer()
     private nonisolated let streamsAudio: Bool
     private var consumer: Task<Void, any Error>?
     private nonisolated let clock = VoiceRecognitionClock()
@@ -134,8 +135,8 @@ public final class VoiceRecognitionSession {
             pcmContinuation.finish(throwing: VoiceRecognitionError.invalidResponse)
             return
         }
-        for offset in stride(from: 0, to: pcm.count, by: 3_200) {
-            if case .dropped = pcmContinuation.yield(pcm.subdata(in: offset..<min(offset + 3_200, pcm.count))) {
+        for packet in packetizer.packets(adding: pcm) {
+            if case .dropped = pcmContinuation.yield(packet) {
                 pcmContinuation.finish(throwing: VoiceRecognitionError.recognitionFailed)
                 return
             }
@@ -150,7 +151,12 @@ public final class VoiceRecognitionSession {
             throw VoiceTranscriptionError.emptyRecording
         }
         clock.stop()
-        pcmContinuation.finish()
+        // Flush the partial packet left by the final capture chunks before closing the stream.
+        if streamsAudio, let tail = packetizer.remainder(), case .dropped = pcmContinuation.yield(tail) {
+            pcmContinuation.finish(throwing: VoiceRecognitionError.recognitionFailed)
+        } else {
+            pcmContinuation.finish()
+        }
         if streamsAudio {
             let task = Task { @MainActor [self] in
                 try await consumer?.value
@@ -214,6 +220,35 @@ public final class VoiceRecognitionSession {
         modelPreparation = nil
         inference?.cancel()
         started = false
+    }
+}
+
+/// Capture hands over a chunk per hardware buffer, about 10 ms of 16 kHz audio, but the PCM stream is bounded by
+/// element count. Repacking into 100 ms packets lets its 256 slots hold the ~25 s the limit is meant to allow
+/// while a recognizer is still connecting; one slot per 10 ms chunk overflowed after under 3 s.
+final class PCMPacketizer: @unchecked Sendable {
+    static let packetBytes = 3_200 // 100 ms, 16 kHz mono Int16
+    private let lock = NSLock()
+    private var pending = Data()
+
+    func packets(adding pcm: Data) -> [Data] {
+        lock.withLock {
+            pending.append(pcm)
+            var packets: [Data] = []
+            while pending.count >= Self.packetBytes {
+                packets.append(Data(pending.prefix(Self.packetBytes)))
+                pending.removeFirst(Self.packetBytes)
+            }
+            return packets
+        }
+    }
+
+    /// The partial packet that is left, if any. Empties the buffer.
+    func remainder() -> Data? {
+        lock.withLock {
+            defer { pending = Data() }
+            return pending.isEmpty ? nil : pending
+        }
     }
 }
 
