@@ -1,6 +1,6 @@
 # 本机定制当前进度
 
-更新日期：2026-10-22。本地 `main` 已合并上游 0.1.10，并按[与上游同步](upstream-merge.md)重整为三层：本地文件、上游文件里的白名单挂钩、`project.local.yml` 构建入口。当前本机预览已安装 **Build71**（0.1.10，CFBundleVersion 71）。最新完整产物为 `../dist/Build71/AIME Voice Preview.app`，Build70 回退包为 `../dist/Build71/work/previous-build70.app`。下方为本次结果与历史记录。
+更新日期：2026-10-22。本地 `main` 已合并上游 0.1.10，并按[与上游同步](upstream-merge.md)重整为三层：本地文件、上游文件里的白名单挂钩、`project.local.yml` 构建入口。当前本机预览已安装 **Build71**（0.1.10，CFBundleVersion 71）。最新完整产物为 `../dist/Build71/AIME Voice Preview.app`，2026-10-22 按用户要求删除全部旧版本产物与回退包（Build69、Build70）、`~/Library/Input Methods` 中的旧签名临时文件，并把旧版工作区 `~/Library/AIME` 移到废纸篓；当前预览数据 `~/Library/AIME Voice Preview` 和 `~/Library/Application Support/AIME` 保留。下方为本次结果与历史记录。
 
 ## 2026-10-22 热词接入与关闭决策（Build71 已安装）
 
