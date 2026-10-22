@@ -92,7 +92,7 @@ public struct VoiceSettingsPane: View {
                 .sheet(isPresented: $showingVocabulary) {
                     VoiceVocabularyEditor(vocabulary: $settings.vocabulary)
                 }
-                Text("与文字词库独立维护。Cohere、Whisper 和 Interfaze 不使用热词，豆包流式按预算提交热词。纠错只在润色前替换一次。整段就是一条已启用纠错触发词时，不论长短，替换后直接上屏。热词只在整段一至四字且完全一致时直接上屏。句子里夹着的词，以及更长的热词，用替换后的文字润色，不再做第二次替换。不会修改键盘候选、短语或词频。")
+                Text("与文字词库独立维护。Whisper 把热词放进识别提示，豆包流式按预算提交热词，Cohere 和 Interfaze 不使用热词；标准和聊天润色会把热词作为专名写法参考发给润色模型。纠错只在润色前替换一次。整段就是一条已启用纠错触发词时，不论长短，替换后直接上屏。热词只在整段一至四字且完全一致时直接上屏。句子里夹着的词，以及更长的热词，用替换后的文字润色，不再做第二次替换。不会修改键盘候选、短语或词频。")
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section("文字整理") {

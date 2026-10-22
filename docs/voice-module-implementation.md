@@ -1,6 +1,15 @@
 # 本机定制当前进度
 
-更新日期：2026-10-22。本地 `main` 已合并上游 0.1.10，并按[与上游同步](upstream-merge.md)重整为三层：本地文件、上游文件里的白名单挂钩、`project.local.yml` 构建入口。当前本机预览已安装 **Build70**（0.1.10，CFBundleVersion 70）。最新完整产物为 `../dist/Build70/AIME Voice Preview.app`，Build69 回退包为 `../dist/Build70/work/previous-build69.app`。下方为本次结果与历史记录。
+更新日期：2026-10-22。本地 `main` 已合并上游 0.1.10，并按[与上游同步](upstream-merge.md)重整为三层：本地文件、上游文件里的白名单挂钩、`project.local.yml` 构建入口。当前本机预览已安装 **Build71**（0.1.10，CFBundleVersion 71）。最新完整产物为 `../dist/Build71/AIME Voice Preview.app`，Build70 回退包为 `../dist/Build71/work/previous-build70.app`。下方为本次结果与历史记录。
+
+## 2026-10-22 热词接入与关闭决策（Build71 已安装）
+
+- 依据 10-21～10-22 的 22 次真实听写日志（只含耗时与路由）：停录后识别中位 482ms、润色中位 593ms；决策调用 11 次、预算内返回 1 次（768ms）、采纳 0 次；纠错命中 1 次；当前后端为本机 Whisper Small，11 个热词在识别和润色中都未被使用。
+- Whisper 每次识别传入 `VoiceVocabulary.whisperPrompt()`：约 60 token 预算内的热词，后接“以下是普通话的句子，使用简体中文。”。用 Whisper Small 实测随包测试音频和两段系统 TTS 中文：不加提示时三段都输出繁体，“DeepSeek”识别为“底普希克”；加提示后全部为简体，DeepSeek、LangChain、向量数据库写法正确，单次耗时约增加 20ms。TTS 不代表真人口音，样本仅 3 段。
+- 标准和聊天润色在系统提示末尾附加 `polishReference()`：热词作为专名写法参考，只允许改正读音相同或相近的识别错误，不添加原文没有的词。自定义润色、翻译和仅转写不附加。该改动未用真实润色服务测试。
+- 用户配置 `decisionMode` 由 `accelerate` 改为 `off`，其他字段未变，文件权限保持 0600；决策模型配置仍保存，可在设置页重新开启。
+- 设置页文案、[隐私说明](voice-privacy.md)和[隔离说明](dictionary-isolation.md)已同步：热词会随标准和聊天润色请求发送给所选润色服务。
+- `build.sh 71` 构建签名通过，三个组件为 Build71，进程已启动，输入源已恢复。未做真人录音验收。
 
 ## 2026-10-22 上游 0.1.10 与模块化重整（Build70 已安装）
 

@@ -26,7 +26,8 @@ actor LocalSpeechRecognizer {
         guard model.isDownloaded else { throw LocalSpeechModelError.notDownloaded }
     }
 
-    func transcribe(_ audio: RecordedAudio, model: LocalSpeechModel) async throws -> String {
+    /// `prompt` biases Whisper toward the user's spelling; Cohere ignores it.
+    func transcribe(_ audio: RecordedAudio, model: LocalSpeechModel, prompt: String? = nil) async throws -> String {
         try Task.checkCancellation()
         try checkAvailability(model)
         busy = true
@@ -48,7 +49,7 @@ actor LocalSpeechRecognizer {
             // short utterances by padding silence instead of rejecting them.
             if samples.count < 16_000 { samples += Array(repeating: 0, count: 16_000 - samples.count) }
             // A fresh session belongs to this operation only; never share it across awaits.
-            result = try await Self.transcribeWhisper(samples, using: whisper)
+            result = try await Self.transcribeWhisper(samples, using: whisper, prompt: prompt)
         }
         try Task.checkCancellation()
         let text = result.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -111,9 +112,10 @@ actor LocalSpeechRecognizer {
 
     // Session is non-Sendable. Create it in a nonisolated operation and keep
     // all access here while the actor's busy flag excludes another inference.
-    nonisolated private static func transcribeWhisper(_ samples: [Float], using model: Model) async throws -> String {
+    nonisolated private static func transcribeWhisper(_ samples: [Float], using model: Model, prompt: String?) async throws -> String {
         let session = try model.session()
-        let transcript = try await session.run(samples, options: RunOptions(language: nil))
+        let family = prompt.map { RunExtension.whisper(WhisperRunOptions(initialPrompt: $0)) }
+        let transcript = try await session.run(samples, options: RunOptions(language: nil, family: family))
         return transcript.text
     }
 

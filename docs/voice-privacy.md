@@ -6,7 +6,7 @@
 
 文字词库仅供键盘输入的编码、候选和词频学习使用。语音词典另存于 `~/Library/Application Support/AIME/voice-settings.json` 的 `vocabulary` 字段，两者不互导、不自动同步，也不共用学习记录。文字词库更新、Rime 同步及现有文字输入备份恢复均不读取或覆盖语音词典。
 
-录音前段使用 FluidVoice Core Audio 组件。Cohere / Whisper 在本机识别；macOS 后端要求设备端识别可用。选择云端后端时，录音会发送给所选 ASR 服务，不能视为本地识别。热词仅按供应商支持发送，Cohere / Whisper / MiMo 不使用同一热词协议；所有后端均不读取文字词库、短语或 Rime 用户词频。录音在内存形成 PCM/WAV，不由该采音前段持久化到磁盘。
+录音前段使用 FluidVoice Core Audio 组件。Cohere / Whisper 在本机识别；macOS 后端要求设备端识别可用。选择云端后端时，录音会发送给所选 ASR 服务，不能视为本地识别。热词仅按供应商支持发送，Cohere / MiMo 不使用同一热词协议；Whisper 在本机把热词放进识别提示（不联网）。标准和聊天润色会把热词作为专名写法参考，随润色请求发送给所选润色服务；自定义润色、翻译和仅转写不发送。所有后端均不读取文字词库、短语或 Rime 用户词频。录音在内存形成 PCM/WAV，不由该采音前段持久化到磁盘。
 
 本地模型仅在点击“下载模型”时从 Hugging Face 下载；网络服务会看到普通下载请求的 IP、时间与 User-Agent，不含录音或词典。文件保存到 `~/Library/Application Support/AIME/VoiceModels/`，安装收据记录仓库提交和文件哈希。Cohere 的 Core ML 编译缓存由底层库管理。设置页的“测试识别”只处理随包固定测试音频，仍按所选识别后端决定是否发送音频。
 

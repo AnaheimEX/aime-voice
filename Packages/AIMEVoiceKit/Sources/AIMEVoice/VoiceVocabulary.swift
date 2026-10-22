@@ -62,14 +62,34 @@ public struct VoiceVocabulary: Codable, Sendable, Equatable {
         }
     }
 
+    /// Whisper initial prompt: reads as preceding Simplified Chinese text that spells the
+    /// hotwords. Whisper keeps only the prompt's last ~224 tokens, so the list is budgeted
+    /// and the guidance sentence stays at the end.
+    public func whisperPrompt() -> String {
+        let guidance = "以下是普通话的句子，使用简体中文。"
+        guard (try? validate()) != nil else { return guidance }
+        let words = Self.streamingHotwords(hotwords, budget: 60)
+        return words.isEmpty ? guidance : "常用词：" + words.joined(separator: "、") + "。" + guidance
+    }
+
+    /// Spelling reference for the polish model. Only near-homophones in the transcript are
+    /// corrected; terms the speaker did not say are never added.
+    public func polishReference() -> String? {
+        guard (try? validate()) != nil else { return nil }
+        let words = Self.streamingHotwords(hotwords, budget: 300)
+        guard !words.isEmpty else { return nil }
+        return "专名写法参考：" + words.joined(separator: "、")
+            + "。只有原文中出现读音相同或相近、明显是识别错误的词时，才按此写法改正；原文没有的词不要添加。"
+    }
+
     /// Type4Me's conservative direct-hotword estimate: CJK = 1, Latin runs = ceil(n/3).
-    /// Keep user order; skip terms which do not fit the streaming 100-token budget.
-    static func streamingHotwords(_ words: [String]) -> [String] {
+    /// Keep user order; skip terms which do not fit the token budget (streaming: 100).
+    static func streamingHotwords(_ words: [String], budget: Int = 100) -> [String] {
         var used = 0
         return normalize(words).prefix(500).filter { word in
             guard word.count <= 80 else { return false }
             let cost = estimatedTokens(word)
-            guard used + cost <= 100 else { return false }
+            guard used + cost <= budget else { return false }
             used += cost
             return true
         }

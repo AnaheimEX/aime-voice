@@ -186,7 +186,7 @@ public final class VoiceRecognitionSession {
             if backend == .cloud {
                 return try await VoiceTranscriber().transcribe(audio, settings: settings)
             }
-            return try await LocalSpeechRecognizer.shared.transcribe(audio, model: model)
+            return try await LocalSpeechRecognizer.shared.transcribe(audio, model: model, prompt: settings.vocabulary.whisperPrompt())
         }
         inference = task
         defer { inference = nil; modelPreparation = nil; started = false }

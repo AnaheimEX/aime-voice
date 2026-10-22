@@ -97,7 +97,7 @@ struct VoiceVocabularyEditor: View {
             VocabularyReturnField(text: $newWord, placeholder: "添加姓名、术语或专有名词，回车添加", onReturn: addWord)
                 .frame(height: 26)
                 .accessibilityIdentifier("voice-vocabulary-new-word")
-            Text("macOS 与支持热词的云端服务使用这些词条；Cohere、Whisper 和 Interfaze 暂不使用。最多 500 个；最终文字纠错对各识别方式均生效。")
+            Text("Whisper、macOS 与支持热词的云端服务使用这些词条，标准和聊天润色也会参考写法；Cohere 和 Interfaze 暂不使用。最多 500 个；最终文字纠错对各识别方式均生效。")
                 .font(.caption).foregroundStyle(.secondary)
             if editingWordIndex != nil {
                 HStack {

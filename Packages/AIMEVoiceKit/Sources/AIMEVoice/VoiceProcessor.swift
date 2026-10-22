@@ -281,13 +281,17 @@ public struct VoiceProcessor: Sendable {
         let localEligible = Self.canUseLocal(text) && !needsSentenceRepair
             && (!usesJoinedChatPolicy || joinedCandidate != nil)
         let metrics = DecisionMetrics()
+        // Standard and chat polish get the hotword spellings; custom prompts stay as written.
+        let modelInstructions = settings.mode == "polish" && settings.effectivePolishStyle != .custom
+            ? settings.vocabulary.polishReference().map { instructions + "\n" + $0 } ?? instructions
+            : instructions
         let stream = AsyncStream<Outcome>.makeStream(bufferingPolicy: .unbounded)
         let original = Task.detached {
             do {
                 try Task.checkCancellation()
                 let inlinePrompt = ["custom", "polish"].contains(settings.mode) && instructions.contains("{text}")
                     ? instructions.replacingOccurrences(of: "{text}", with: text) : nil
-                let output = try await Self.complete(endpoint: settings.llm, instructions: instructions,
+                let output = try await Self.complete(endpoint: settings.llm, instructions: modelInstructions,
                                                      text: text, inlinePrompt: inlinePrompt, isolateTranscript: settings.mode == "polish")
                 if !Task.isCancelled { stream.continuation.yield(.original(output)) }
             } catch VoiceHTTP.Failure.empty where settings.mode == "polish" {
@@ -344,7 +348,7 @@ public struct VoiceProcessor: Sendable {
                 try Task.checkCancellation()
                 // Same model and policy: avoid trading semantic quality for latency.
                 // At most one delayed request can race an unusually slow original.
-                let output = try await Self.complete(endpoint: settings.llm, instructions: instructions,
+                let output = try await Self.complete(endpoint: settings.llm, instructions: modelInstructions,
                                                      text: text, isolateTranscript: true)
                 // Delayed candidates may only repair formatting. Semantic changes
                 // (including numeric normalization) remain with the original model.

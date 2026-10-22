@@ -12,7 +12,7 @@
 | 管理入口 | 设置中的“文字输入”分组：“文字词库”和“自定义短语”；词频通过既有 Rime 功能管理 | 设置 → 语音输入 → 语音词典 → 管理语音词典 |
 | 数据结构 | `VocabularyEntry(text, pinyin, weight)`、Rime 词典、短语表和用户词频库 | `VoiceVocabulary.hotwords` 与 `replacements` |
 | 内容来源 | 随包词表、用户订阅或安装的 Rime 词表、用户短语、Rime 学习记录 | 用户在语音词典中明确维护的识别词条和纠错规则 |
-| 生效阶段 | librime 处理按键、生成候选及学习用户选择时 | 当前 Cohere / Whisper 不使用热词；润色等文字处理及格式整理结束后、上屏前应用纠错 |
+| 生效阶段 | librime 处理按键、生成候选及学习用户选择时 | Whisper 把热词放进识别提示，Cohere 不使用；标准和聊天润色把热词作为专名写法参考；润色等文字处理及格式整理结束后、上屏前应用纠错 |
 | 保存与更新 | Rime 工作目录及配置层；词库更新后按既有流程重建和部署 | `voice-settings.json` 内的 `vocabulary` 字段；应用草稿并保存语音设置，供下一次会话使用 |
 | 同步与备份 | 既有 Rime 词频同步及 `.aimebackup` 的文字输入备份 | 不进入既有 Rime 同步或 `.aimebackup`；当前界面没有独立词典导入导出 |
 
@@ -36,7 +36,7 @@
 
 ### 识别词条
 
-当前生产 `VoiceRecognitionSession` 使用 FluidVoice 对应的 Cohere / Whisper 本地后端，不读取或提交 `hotwords`，也不把词条加入润色提示。已保存词条继续保留、可编辑，最多 500 个，每条最多 80 个字符，但本轮本地识别不承诺热词生效。
+本地后端中，Whisper 每次识别使用 `VoiceVocabulary.whisperPrompt()` 作为 initial prompt：按估算预算取前若干热词（约 60 token），后接“以下是普通话的句子，使用简体中文。”，同时让输出保持简体；Cohere 仍不使用热词。标准和聊天润色在系统提示末尾附加 `polishReference()`（约 300 token 预算），只允许改正原文中读音相同或相近的识别错误，不添加原文没有的词；自定义润色、翻译和仅转写不附加。词条最多 500 个，每条最多 80 个字符。
 
 旧 Apple Speech、豆包和云端整段识别适配器及其协议检查仍保留在源码；它们不再由正常录音入口或设置页调用。旧适配器中的 `contextualStrings` / `request.corpus.context` 支持不能视为当前本地识别已支持热词。最终本地纠错仍生效，文字词库不参与。
 
