@@ -49,6 +49,8 @@ CLI="$(swift build --build-system native --package-path Packages/AIMEKit -c rele
 
 echo "==> staging and signing"
 mkdir -p "$OUT"
+# Spotlight would register dist apps with LaunchServices as more copies of the input method.
+touch "$(dirname "$OUT")/.metadata_never_index"
 python3 "$HERE/stage.py" "$ROOT" "$DERIVED/Build/Products/Release" "$REFERENCE" "$APP" "$CLI" --build "$BUILD"
 # A copied-in source tree or reference keeps Gatekeeper quarantine; macOS will not register a
 # quarantined, self-signed input method.

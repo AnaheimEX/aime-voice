@@ -17,6 +17,21 @@ stage = args.stage.resolve(strict=True)
 helper = args.helper.resolve(strict=True)
 work = args.work.resolve(strict=True)
 installed = pathlib.Path.home() / "Library/Input Methods/AIME Voice Preview.app"
+lsregister = "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
+
+
+def retire(app):
+    """Keep an app that shares the installed bundle id only as a zip.
+
+    Any other copy with this bundle id (the staged one, the rollback copy, one dragged to
+    /Applications) lets imklaunchagent resolve the input method to the wrong bundle or run
+    two servers on one connection name; typing then stops working.
+    """
+    subprocess.run(["ditto", "-c", "-k", "--keepParent", str(app), str(app) + ".zip"], check=True)
+    subprocess.run([lsregister, "-u", str(app)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    shutil.rmtree(app)
+
+
 # A first install (new Mac) has no previous app to compare against or roll back to.
 first_install = not installed.exists()
 old_version = None if first_install else str(plistlib.loads((installed / "Contents/Info.plist").read_bytes())["CFBundleVersion"])
@@ -47,23 +62,26 @@ try:
     subprocess.run(["codesign", "--verify", "--deep", "--strict", str(installed)], check=True)
     subprocess.run([str(helper), "register", str(installed)], check=True)
 except BaseException:
+    failed = work / "failed-install.app"
     if installed.exists():
-        installed.rename(work / "failed-install.app")
+        installed.rename(failed)
     if previous is not None:
         previous.rename(installed)
         subprocess.run([str(helper), "register", str(installed)])
     if current:
         subprocess.run([str(helper), "select", current])
+    for leftover in (failed, stage):
+        if leftover.exists():
+            try:
+                retire(leftover)
+            except Exception as error:
+                print("WARNING: could not archive", leftover, "-", error)
     raise
 if current:
     subprocess.run([str(helper), "select", current], check=True)
-# Any other copy with this bundle id (the staged one, one dragged to /Applications) lets
-# imklaunchagent resolve the input method to the wrong bundle or run two servers on one
-# connection name; typing then stops working. Keep the staged build only as a zip.
-lsregister = "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
-subprocess.run(["ditto", "-c", "-k", "--keepParent", str(stage), str(stage) + ".zip"], check=True)
-subprocess.run([lsregister, "-u", str(stage)])
-shutil.rmtree(stage)
+retire(stage)
+if previous is not None:
+    retire(previous)
 bundle_id = plistlib.loads((installed / "Contents/Info.plist").read_bytes())["CFBundleIdentifier"]
 others = []
 path = None
@@ -76,5 +94,5 @@ for other in sorted(set(others)):
     print("WARNING: another copy of", bundle_id, "is registered:", other, "- remove it, then: lsregister -u <path>")
 subprocess.run(["open", "-a", str(installed)], check=True)
 subprocess.run(["open", str(installed / "Contents/Applications/AIME Settings.app")], check=True)
-print("Installed Build" + new_version + ("; first install" if previous is None else "; previous Build" + old_version + " retained at " + str(previous)))
+print("Installed Build" + new_version + ("; first install" if previous is None else "; previous Build" + old_version + " retained at " + str(previous) + ".zip"))
 print("Restored input source:", current)

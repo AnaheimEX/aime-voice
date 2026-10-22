@@ -17,7 +17,7 @@ scripts/local-preview-build64/build.sh <构建号> [--install]
 3. Xcode Release 构建：`ONLY_ACTIVE_ARCH=NO`、`CURRENT_PROJECT_VERSION=<构建号>`、临时 ad-hoc 签名。营销版本来自上游 `project.yml`。
 4. CLI 用 native SwiftPM Release 构建（arm64）。
 5. `stage.py`、`sign-nested.py`、`sign-local.py` 组装并签名，然后删除签名过程留在产物旁边的临时文件。
-6. 加 `--install` 时编译 `input-source.swift` 并运行 `install.py`。旧包保存在 `dist/Build<构建号>/work/previous-build<旧构建号>.app`，是否删除由用户决定。
+6. 加 `--install` 时编译 `input-source.swift` 并运行 `install.py`。旧包保存为 `dist/Build<构建号>/work/previous-build<旧构建号>.app.zip`，是否删除由用户决定。回退时先停止并移走已安装的预览，再把 zip 解压到 `~/Library/Input Methods`，不要在 `dist` 里解压后双击。
 
 ## 文件
 
@@ -25,6 +25,6 @@ scripts/local-preview-build64/build.sh <构建号> [--install]
 - `sign-nested.py APP`：恢复 CTranscribe framework 的版本链接，签署 framework、dylib、CLI 资源包和 CLI（CLI 关闭 library validation）。Xcode 可能只重签顶层二进制；若与版本副本不同，先在临时副本按架构统一临时签名，逐字节比较，确认代码一致后才规范布局。
 - `sign-local.py APP REFERENCE ROOT`：用本机证书签名，并按参考包的 designated requirement 验证每个组件：identifier 必须一致，证书哈希换成本机证书。设置及 XPC 关闭 library validation；主程序在上游 `AIME.entitlements` 之上追加 `com.apple.security.device.audio-input`。最后执行完整包 `codesign --verify --deep --strict`。签名需符合当次授权；不会枚举或导出密钥。
 - `input-source.swift`：提供 current、select、register；安装前编译为 `input-source`。
-- `install.py APP --helper INPUT_SOURCE --work WORK`：没有已安装的预览时按首次安装处理，不做版本比较和旧包备份；否则要求数值构建号递增，验证候选签名，保存并切换输入源，停止已安装 Preview 进程，将旧包移至工作目录，复制／验证／注册新包；失败恢复旧包，成功恢复原输入源并启动主程序与设置。成功后把 `dist` 里的副本压缩为 `AIME Voice Preview.app.zip` 并删除 `.app`，再列出仍在 LaunchServices 登记的其他同身份副本。同一 bundle id 只能有一份 `.app`：不要把它复制到 `/Applications` 或直接双击 zip 解出的副本，否则 `imklaunchagent` 可能连错副本，打字失效。
+- `install.py APP --helper INPUT_SOURCE --work WORK`：没有已安装的预览时按首次安装处理，不做版本比较和旧包备份；否则要求数值构建号递增，验证候选签名，保存并切换输入源，停止已安装 Preview 进程，将旧包移至工作目录，复制／验证／注册新包；失败恢复旧包，成功恢复原输入源并启动主程序与设置。暂存副本、回退用的旧包和安装失败的副本都只保留为 `.zip`，`.app` 注销登记后删除；最后列出仍在 LaunchServices 登记的其他同身份副本。`build.sh` 会在 `dist` 放 `.metadata_never_index`，不让 Spotlight 把产物登记成第二份输入法。同一 bundle id 只能有一份 `.app`：不要把它复制到 `/Applications` 或直接双击 zip 解出的副本，否则 `imklaunchagent` 可能连错副本，打字失效。
 
 预览身份在运行时由 `LocalBuildInfo` 从 bundle id 识别：数据目录为 `~/Library/AIME Voice Preview/Rime`，日志为 `~/Library/Logs/AIME Voice Preview`，与正式版 AIME 互不干扰。完整交付记录见 `docs/voice-module-implementation.md`。
