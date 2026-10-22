@@ -1,4 +1,5 @@
 import AIMECore
+import AIMEVoiceHost
 import AIMEPanel
 import AppKit
 import InputMethodKit
@@ -18,6 +19,7 @@ final class InputEngine {
     let panel = CandidatePanel()
     /// Opt-in local word statistics (高频词); off unless enabled in Settings.
     let usage = UsageRecorder()
+    lazy var voiceFeature = VoiceFeature(host: LocalVoiceAdapter(engine: self))
     /// aime/features.json, reloaded when Settings posts `AIMEFeatures.changedNotification`.
     private(set) var features = AIMEFeatures()
     /// Chinese/English punctuation shared by all apps, following ⌃⇧3 wherever it is
@@ -85,6 +87,7 @@ final class InputEngine {
     // MARK: - Lifecycle
 
     func start() {
+        _ = voiceFeature
         let fm = FileManager.default
         try? fm.createDirectory(at: paths.userDataDir, withIntermediateDirectories: true)
         try? fm.createDirectory(at: paths.logDir, withIntermediateDirectories: true)
@@ -596,9 +599,11 @@ final class InputEngine {
 
     // MARK: - Status bubble
 
-    func showStatus(_ text: String) {
+    func showStatus(_ text: String, persistent: Bool = false) {
         statusHideTask?.cancel()
+        statusHideTask = nil
         panel.show(PanelState(status: text), at: activeController?.cursorRect() ?? .zero)
+        guard !persistent else { return }
         statusHideTask = Task { @MainActor [weak self] in
             try? await Task.sleep(for: .milliseconds(900))
             guard !Task.isCancelled, let self else { return }

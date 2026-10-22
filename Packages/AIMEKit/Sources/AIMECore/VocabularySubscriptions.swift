@@ -553,6 +553,7 @@ public struct SubscriptionManager: Sendable {
                 }
             }
         }
+        try LocalVocabularyCustomization.afterRebuild(paths: paths, schemas: schemas)
         return entries.count
     }
 
@@ -614,6 +615,7 @@ public struct SubscriptionManager: Sendable {
         var parts = ["v3", schemas.sorted().joined(separator: ",")]
         if let shipped = paths.sharedDataDir?.appendingPathComponent("aime/aime_tech.tsv") { parts.append(digest(shipped)) }
         for item in items.sorted(by: { $0.id < $1.id }) { parts.append("\(item.id)=\(digest(cacheURL(item.id)))") }
+        if let local = LocalVocabularyCustomization.signaturePart(paths: paths, schemas: schemas) { parts.append(local) }
         return parts.joined(separator: "|")
     }
 

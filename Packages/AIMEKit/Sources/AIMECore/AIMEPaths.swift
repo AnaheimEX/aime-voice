@@ -23,8 +23,8 @@ public struct AIMEPaths: Sendable, Equatable {
         }
         let library = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library", isDirectory: true)
         return AIMEPaths(
-            userDataDir: library.appendingPathComponent("AIME/Rime", isDirectory: true),
-            logDir: library.appendingPathComponent("Logs/AIME", isDirectory: true)
+            userDataDir: library.appendingPathComponent("\(LocalBuildInfo.dataFolderName)/Rime", isDirectory: true),
+            logDir: library.appendingPathComponent("Logs/\(LocalBuildInfo.dataFolderName)", isDirectory: true)
         )
     }
 

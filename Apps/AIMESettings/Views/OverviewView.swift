@@ -271,6 +271,7 @@ struct VersionFooter: View {
     }
 
     @ViewBuilder private var updateControls: some View {
+        if LocalIntegrationControls.replacesUpdater { LocalIntegrationControls() } else {
         Toggle("自动检查更新", isOn: Binding(get: { model.updateState.autoCheck }, set: { model.setAutoUpdate($0) }))
             .toggleStyle(.checkbox).font(.caption)
             .help("每天请求一次 get.zool.app 上公开的版本清单，不发送任何输入内容")
@@ -284,6 +285,7 @@ struct VersionFooter: View {
         }
         .controlSize(.small)
         .disabled(model.updateChecking)
+        }
     }
 
     private func exportDiagnostics() {

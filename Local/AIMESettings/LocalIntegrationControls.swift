@@ -4,6 +4,9 @@ import SwiftUI
 /// The local CLI owns integration and installation. Closing Settings does not
 /// terminate it: output goes to a file, never a pipe owned by the UI process.
 struct LocalIntegrationControls: View {
+    /// Set by project.local.yml; replaces the official updater controls in the version footer.
+    static var replacesUpdater: Bool { Bundle.main.object(forInfoDictionaryKey: "AIMELocalIntegration") as? Bool == true }
+
     @AppStorage("localIntegrationRepository") private var repository = ""
     @State private var running = false
     @State private var notice = ""

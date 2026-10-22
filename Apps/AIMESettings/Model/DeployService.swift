@@ -27,7 +27,7 @@ enum Locations {
         return env.map { URL(fileURLWithPath: $0) }
     }
 
-    static let inputMethodBundleID = "app.zool.inputmethod.aime"
+    static let inputMethodBundleID = LocalBuildInfo.inputMethodBundleID
 }
 
 /// Deploys through the running input method (so its sessions reload immediately), or

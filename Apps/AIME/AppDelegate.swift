@@ -10,6 +10,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        InputEngine.shared.voiceFeature.shutdown()
         RimeKitShutdown.finalize()
     }
 }

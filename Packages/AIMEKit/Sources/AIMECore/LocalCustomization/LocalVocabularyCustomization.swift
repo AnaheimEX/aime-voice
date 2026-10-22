@@ -1,194 +1,185 @@
 import Foundation
 
-/// Only generated vocabulary files and mounts; never contains user dictionaries or settings.
-public struct VocabularyOverlayPlan: Sendable {
-    public let files: [String: String]
-    public let entryCount: Int
-    public let schemas: [String]
-    /// Absent for unsupported layouts: remove only stale mounts owned by this module.
-    public let mounts: [String: ConfigValue]
-    public let managedPatchKeys: Set<String>
-}
-
-/// Host-read state of owned file presence and generated patches. Imported/user layers are not inspected.
-/// Content changes in source vocabularies remain tracked by SubscriptionManager's signature.
-public struct VocabularyOverlaySnapshot: Sendable {
-    public let existingFiles: Set<String>
-    public let patches: [String: [ConfigValue.Entry]]
-
-    public init(existingFiles: Set<String>, patches: [String: [ConfigValue.Entry]]) {
-        self.existingFiles = existingFiles
-        self.patches = patches
-    }
-}
-
-/// Deterministic customization over the upstream subscription results. No file or network I/O.
-public enum LocalVocabularyCustomization {
-    static let tableName = "aime_online"
-
-    static func tableFileName(for layout: DoublePinyin?) -> String {
-        layout.map { "\(tableName)_\($0.rawValue).txt" } ?? "\(tableName).txt"
-    }
-
-    private static func dictionaryName(for layout: DoublePinyin?) -> String {
-        String(tableFileName(for: layout).dropLast(4)) + "_dynamic"
-    }
-
-    private static var dictionaryNames: Set<String> {
-        Set(([nil] + DoublePinyin.allCases.map(Optional.some)).map { dictionaryName(for: $0) })
-    }
-
-    private static func translatorConfiguration(for layout: DoublePinyin?) -> ConfigValue {
-        let dictionary = dictionaryName(for: layout)
-        return .map([
-            .init("dictionary", .string(dictionary)), .init("user_dict", .string(dictionary)),
-            .init("db_class", "userdb"), .init("enable_user_dict", true),
-            .init("enable_completion", false), .init("enable_sentence", false),
-            .init("initial_quality", 1.2), .init("comment_format", .list([])),
-        ])
-    }
-
-    /// Remove only our translator and dictionary dependencies, preserving other patches.
-    private static func removeMount(from patch: inout [ConfigValue.Entry]) {
-        patch.removeAll { $0.key == tableName }
-        let translator = ConfigValue.string("table_translator@\(tableName)")
-        for key in ["engine/translators/+", "schema/dependencies/+"] {
-            guard let index = patch.firstIndex(where: { $0.key == key }),
-                  let list = patch[index].value.listValue else { continue }
-            let rest = list.filter { value in
-                if key == "engine/translators/+" { return value != translator }
-                return !dictionaryNames.contains(value.stringValue ?? "")
-            }
-            if rest.isEmpty { patch.remove(at: index) } else { patch[index].value = .list(rest) }
-        }
-    }
-
-    private static func append(_ value: ConfigValue, to key: String, in patch: inout [ConfigValue.Entry]) {
-        if let index = patch.firstIndex(where: { $0.key == key }) {
-            let existing = patch[index].value.listValue ?? []
-            if !existing.contains(value) { patch[index].value = .list(existing + [value]) }
-        } else {
-            patch.append(.init(key, .list([value])))
-        }
-    }
-
-    /// Full pinyin schemas and double pinyin layouts AIME can convert to.
-    static func canMount(_ schema: String) -> Bool {
-        if DoublePinyin.layout(forSchema: schema) != nil { return true }
-        let nonPinyin = ["double_pinyin", "t9", "wubi", "cangjie", "stroke", "zhengma", "array", "bopomofo", "jyut"]
-        return !nonPinyin.contains { schema.hasPrefix($0) }
-    }
-
-    public enum Failure: Error, Equatable {
-        case unplannedSchema(String)
+/// Learnable subscription vocabulary (local customization).
+///
+/// Upstream `SubscriptionManager.rebuild` writes `aime_online*.txt` and mounts each table
+/// read-only (`stabledb`). When the enclosing app opts in (`LocalBuildInfo.customizesVocabulary`),
+/// `afterRebuild` post-processes exactly what upstream produced: the same rows are compiled
+/// into `aime_online*_dynamic.dict.yaml` with a dependency schema, and each upstream mount is
+/// switched to that dictionary with a `userdb`, so selections are learned. Which rows exist,
+/// how they are encoded and which schemas get a mount all stay upstream decisions.
+///
+/// Hooks in `VocabularySubscriptions.swift`: one call at the end of `rebuild`, one signature
+/// part in `tableSignature`. Without the opt-in both are no-ops.
+enum LocalVocabularyCustomization {
+    enum Failure: Error, Equatable {
         case ambiguousPatch(String)
     }
 
-    private static func validate(_ patch: [ConfigValue.Entry], for schema: String,
-                                 using plan: VocabularyOverlayPlan) throws {
-        guard plan.schemas.contains(schema) else { throw Failure.unplannedSchema(schema) }
-        for key in plan.managedPatchKeys.sorted() {
-            let values = patch.filter { $0.key == key }
-            guard values.count <= 1 else { throw Failure.ambiguousPatch(key) }
-            if key != tableName, let value = values.first?.value, value.listValue == nil {
-                throw Failure.ambiguousPatch(key)
-            }
+    /// Tests force the customization on or off for one task.
+    @TaskLocal static var enabledOverride: Bool? = nil
+
+    static var isEnabled: Bool { enabledOverride ?? LocalBuildInfo.customizesVocabulary }
+
+    static let version = "local-learnable-v1"
+    private static let tableKey = SubscriptionManager.tableName
+    private static let dependenciesKey = "schema/dependencies/+"
+    private static let layouts: [DoublePinyin?] = [nil] + DoublePinyin.allCases
+
+    static func dictionaryName(for layout: DoublePinyin?) -> String {
+        dictionaryName(forTable: String(SubscriptionManager.tableFileName(for: layout).dropLast(4)))
+    }
+
+    private static func dictionaryName(forTable table: String) -> String {
+        table.hasSuffix("_dynamic") ? table : table + "_dynamic"
+    }
+
+    private static var dictionaryNames: Set<String> { Set(layouts.map(dictionaryName(for:))) }
+
+    static func ownedFiles() -> [String] {
+        layouts.flatMap { ["\(dictionaryName(for: $0)).dict.yaml", "\(dictionaryName(for: $0)).schema.yaml"] }
+    }
+
+    // MARK: - Hooks
+
+    /// Appended to the table signature. A missing file or a mount that is not learnable
+    /// changes it, so `ensureTables` rebuilds (twice: upstream stores the signature it
+    /// computed before rebuilding, and the repaired state then differs from it once).
+    static func signaturePart(paths: AIMEPaths, schemas: [String]) -> String? {
+        guard isEnabled else { return nil }
+        return isInstalled(paths: paths, schemas: schemas) ? version : version + "-repair"
+    }
+
+    /// Runs after upstream wrote its tables and mounts.
+    static func afterRebuild(paths: AIMEPaths, schemas: [String]) throws {
+        guard isEnabled else { return }
+        let layers = ConfigLayers(paths: paths)
+        let schemas = Array(Set(schemas)).sorted()
+        // Validate every patch first: an ambiguous one keeps all of upstream's mounts.
+        let patches = try schemas.map { schema in
+            let patch = try layers.generatedPatch(.schema(schema))
+            try validate(patch)
+            return (schema: schema, patch: patch)
+        }
+        for layout in layouts {
+            let table = paths.userDataDir.appendingPathComponent(SubscriptionManager.tableFileName(for: layout))
+            let rows = rows(ofTable: try String(contentsOf: table, encoding: .utf8))
+            let dictionary = dictionaryName(for: layout)
+            try write(dictionaryFile(dictionary, rows: rows), to: paths.userDataDir.appendingPathComponent("\(dictionary).dict.yaml"))
+            try write(dependencySchema(dictionary), to: paths.userDataDir.appendingPathComponent("\(dictionary).schema.yaml"))
+        }
+        for (schema, patch) in patches where learnable(patch) != patch {
+            try layers.updateGenerated(.schema(schema)) { $0 = learnable($0) }
         }
     }
 
-    public static func updating(_ patch: [ConfigValue.Entry], for schema: String,
-                                using plan: VocabularyOverlayPlan) throws -> [ConfigValue.Entry] {
-        try validate(patch, for: schema, using: plan)
+    // MARK: - Transformation
+
+    static func isInstalled(paths: AIMEPaths, schemas: [String]) -> Bool {
+        let fm = FileManager.default
+        guard ownedFiles().allSatisfy({ fm.fileExists(atPath: paths.userDataDir.appendingPathComponent($0).path) }) else {
+            return false
+        }
+        let layers = ConfigLayers(paths: paths)
+        return schemas.allSatisfy { schema in
+            guard let patch = try? layers.generatedPatch(.schema(schema)), (try? validate(patch)) != nil else { return false }
+            return learnable(patch) == patch
+        }
+    }
+
+    static func validate(_ patch: [ConfigValue.Entry]) throws {
+        let mounts = patch.filter { $0.key == tableKey }
+        guard mounts.count <= 1, mounts.allSatisfy({ $0.value.entries != nil }) else {
+            throw Failure.ambiguousPatch(tableKey)
+        }
+        let dependencies = patch.filter { $0.key == dependenciesKey }
+        guard dependencies.count <= 1, dependencies.allSatisfy({ $0.value.listValue != nil }) else {
+            throw Failure.ambiguousPatch(dependenciesKey)
+        }
+    }
+
+    /// Idempotent. Mounted schemas get the learnable dictionary and its dependency;
+    /// schemas upstream did not mount lose only this module's dependencies.
+    static func learnable(_ patch: [ConfigValue.Entry]) -> [ConfigValue.Entry] {
         var result = patch
-        removeMount(from: &result)
-        if let configuration = plan.mounts[schema] {
-            result.append(.init(tableName, configuration))
-            append(.string("table_translator@\(tableName)"), to: "engine/translators/+", in: &result)
-            append(configuration["dictionary"]!, to: "schema/dependencies/+", in: &result)
+        var dependency: ConfigValue?
+        if let index = result.firstIndex(where: { $0.key == tableKey }),
+           let mount = result[index].value.entries,
+           let table = result[index].value["user_dict"]?.stringValue, !table.isEmpty {
+            let dictionary = dictionaryName(forTable: table)
+            result[index].value = .map(learnableMount(mount, dictionary: dictionary))
+            dependency = .string(dictionary)
+        }
+        let names = dictionaryNames
+        let index = result.firstIndex { $0.key == dependenciesKey }
+        var list = index.flatMap { result[$0].value.listValue } ?? []
+        list.removeAll { names.contains($0.stringValue ?? "") }
+        if let dependency { list.append(dependency) }
+        switch (index, list.isEmpty) {
+        case let (index?, true): result.remove(at: index)
+        case let (index?, false): result[index].value = .list(list)
+        case (nil, false): result.append(.init(dependenciesKey, .list(list)))
+        case (nil, true): break
         }
         return result
     }
 
-    public static func isSatisfied(_ plan: VocabularyOverlayPlan, by snapshot: VocabularyOverlaySnapshot) -> Bool {
-        guard Set(plan.files.keys).isSubset(of: snapshot.existingFiles) else { return false }
-        return plan.schemas.allSatisfy { schema in
-            guard let patch = snapshot.patches[schema] else { return false }
-            do { try validate(patch, for: schema, using: plan) } catch { return false }
-            let value = ConfigValue.map(patch)
-            let translators = (value["engine/translators/+"]?.listValue ?? [])
-                .filter { $0 == .string("table_translator@\(tableName)") }
-            let dependencies = (value["schema/dependencies/+"]?.listValue ?? [])
-                .filter { dictionaryNames.contains($0.stringValue ?? "") }
-            guard let configuration = plan.mounts[schema] else {
-                return value[tableName] == nil && translators.isEmpty && dependencies.isEmpty
-            }
-            return value[tableName] == configuration
-                && translators == [.string("table_translator@\(tableName)")]
-                && dependencies == [configuration["dictionary"]!]
+    /// Keeps upstream's mount options and order; replaces only the dictionary and learning keys.
+    private static func learnableMount(_ mount: [ConfigValue.Entry], dictionary: String) -> [ConfigValue.Entry] {
+        let overrides: [String: ConfigValue] = [
+            "dictionary": .string(dictionary), "user_dict": .string(dictionary),
+            "db_class": "userdb", "enable_user_dict": true, "initial_quality": 1.2,
+        ]
+        var result = mount.map { entry in overrides[entry.key].map { ConfigValue.Entry(entry.key, $0) } ?? entry }
+        if !result.contains(where: { $0.key == "enable_user_dict" }) {
+            let position = result.firstIndex { $0.key == "db_class" }.map { $0 + 1 } ?? result.endIndex
+            result.insert(.init("enable_user_dict", true), at: position)
         }
+        for key in ["dictionary", "user_dict", "db_class", "initial_quality"] where !result.contains(where: { $0.key == key }) {
+            result.append(.init(key, overrides[key]!))
+        }
+        return result
     }
 
-    public static func plan(entries sourceEntries: [VocabularyEntry], schemas: [String]) throws -> VocabularyOverlayPlan {
-        // Same word from several sources: keep one row per (text, pinyin), highest weight.
-        var seen: [String: Int] = [:]
-        var entries: [VocabularyEntry] = []
-        for entry in sourceEntries {
-            let key = entry.text + "\t" + entry.pinyin
-            if let index = seen[key] {
-                if entry.weight > entries[index].weight { entries[index] = entry }
-            } else {
-                seen[key] = entries.count
-                entries.append(entry)
-            }
-        }
-        var files: [String: String] = [:]
-        let layouts: [DoublePinyin?] = [nil] + DoublePinyin.allCases
-        for layout in layouts {
-            var rows: [String] = []
-            var lines = [
-                "# Rime table", "# coding: utf-8", "#@/db_name\t\(Self.tableFileName(for: layout))", "#@/db_type\ttabledb", "#",
-                "# Generated by AIME from bundled and subscribed vocabularies — do not edit.", "#", "# 此行之后不能写注释",
-            ]
-            for entry in entries {
-                let isLatin = !entry.pinyin.contains(" ") && !entry.text.unicodeScalars.contains { (0x4E00...0x9FFF).contains($0.value) }
-                let code: String? = if isLatin { entry.pinyin }
-                    else if let layout { layout.code(forPinyin: entry.pinyin) }
-                    else { entry.pinyin.replacingOccurrences(of: " ", with: "") }
-                if let code, !code.isEmpty { rows.append("\(entry.text)\t\(code)\t\(entry.weight)") }
-            }
-            lines += rows
-            files[Self.tableFileName(for: layout)] = lines.joined(separator: "\n") + "\n"
-            let dictionary = Self.dictionaryName(for: layout)
-            let header = """
-                # Generated by AIME bundled and subscribed vocabularies — do not edit.
-                ---
-                name: \(dictionary)
-                version: "1"
-                sort: by_weight
-                use_preset_vocabulary: false
-                columns: [text, code, weight]
-                ...
+    // MARK: - Files
 
-                """
-            files["\(dictionary).dict.yaml"] = header + "\n" + rows.joined(separator: "\n") + "\n"
-            let dependency = """
-                # Dependency schema for the learnable AIME vocabulary.
-                schema:
-                  schema_id: \(dictionary)
-                  name: AIME 在线词库
-                  version: "1"
-                translator:
-                  dictionary: \(dictionary)
+    /// Upstream table rows (`text<TAB>code<TAB>weight`). Vocabulary parsing skips `#` lines,
+    /// so no row starts with `#`.
+    static func rows(ofTable table: String) -> [String] {
+        table.split(separator: "\n").map(String.init).filter { !$0.isEmpty && !$0.hasPrefix("#") }
+    }
 
-                """
-            files["\(dictionary).schema.yaml"] = dependency
-        }
-        let schemas = Array(Set(schemas)).sorted()
-        let mounts = Dictionary(uniqueKeysWithValues: schemas.filter(canMount).map {
-            ($0, translatorConfiguration(for: DoublePinyin.layout(forSchema: $0)))
-        })
-        return VocabularyOverlayPlan(files: files, entryCount: entries.count, schemas: schemas,
-                                     mounts: mounts,
-                                     managedPatchKeys: [tableName, "engine/translators/+", "schema/dependencies/+"])
+    static func dictionaryFile(_ dictionary: String, rows: [String]) -> String {
+        let header = """
+            # Generated by AIME bundled and subscribed vocabularies — do not edit.
+            ---
+            name: \(dictionary)
+            version: "1"
+            sort: by_weight
+            use_preset_vocabulary: false
+            columns: [text, code, weight]
+            ...
+
+            """
+        return header + "\n" + rows.joined(separator: "\n") + "\n"
+    }
+
+    static func dependencySchema(_ dictionary: String) -> String {
+        """
+        # Dependency schema for the learnable AIME vocabulary.
+        schema:
+          schema_id: \(dictionary)
+          name: AIME 在线词库
+          version: "1"
+        translator:
+          dictionary: \(dictionary)
+
+        """
+    }
+
+    /// Unchanged files keep their modification date, so librime does not recompile them.
+    private static func write(_ content: String, to url: URL) throws {
+        if (try? String(contentsOf: url, encoding: .utf8)) == content { return }
+        try content.write(to: url, atomically: true, encoding: .utf8)
     }
 }
