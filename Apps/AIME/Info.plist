@@ -2,8 +2,6 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>AIMEVoiceServiceIdentifier</key>
-	<string>app.zool.aime.voice</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
@@ -72,21 +70,10 @@
 	<false/>
 	<key>LSUIElement</key>
 	<true/>
-	<key>NSAppTransportSecurity</key>
-	<dict>
-		<key>NSAllowsArbitraryLoads</key>
-		<true/>
-		<key>NSAllowsLocalNetworking</key>
-		<true/>
-	</dict>
 	<key>NSHumanReadableCopyright</key>
 	<string>© 2026 ZOOL LLC. 原创源码 MIT；发行包 GPL-3.0。</string>
-	<key>NSMicrophoneUsageDescription</key>
-	<string>录制语音并将转写或润色结果输入到当前文本框</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
-	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>使用 macOS 本机语音识别将说话内容输入到当前文本框</string>
 	<key>TICapsLockLanguageSwitchCapable</key>
 	<true/>
 	<key>TISInputSourceID</key>

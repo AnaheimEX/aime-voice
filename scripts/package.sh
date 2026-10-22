@@ -55,8 +55,6 @@ cp scripts/pkg/resources/*.html "$STAGE/"
   cat scripts/pkg/LICENSE-header.txt
   printf '\n\n==== MIT License (AIME original code) ====\n\n'
   cat LICENSE
-  printf "\n\n==== MIT License (Type4Me audio pipeline) ====\n\n"
-  cat licenses/type4me.LICENSE.txt
   printf '\n\n==== GNU General Public License v3.0 ====\n\n'
   cat licenses/native-plugins/librime-octagram.LICENSE.txt
 } > "$STAGE/LICENSE"

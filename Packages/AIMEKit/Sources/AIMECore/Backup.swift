@@ -1,11 +1,11 @@
 public import Foundation
 
-/// Local backup and restore of keyboard input data: settings layers, feature switches,
-/// snippets and phrase tables, vocabulary subscriptions, user schemas, dictionaries and
-/// Lua, learned frequencies (as RIME sync snapshots) and optional input statistics.
-/// One `.aimebackup` file (a zip with a manifest and SHA-256 per file); nothing leaves
-/// the Mac. Excludes voice settings and vocabulary, API keys, and shipped or rebuilt
-/// data (build output, bundled rime-ice dictionaries, the grammar model and caches).
+/// Local backup and restore of everything the user made: settings layers, feature
+/// switches, snippets and phrase tables, vocabulary subscriptions, their own schemas,
+/// dictionaries and Lua, the learned frequencies (as RIME sync snapshots) and, if asked,
+/// input statistics. One `.aimebackup` file (a zip with a manifest and SHA-256 per file);
+/// nothing leaves the Mac. Left out: what AIME rebuilds or ships (build output, the
+/// bundled rime-ice dictionaries, the grammar model, caches) and the API key.
 public struct BackupManager: Sendable {
     public static let fileExtension = "aimebackup"
     public static let format = "aime-backup"

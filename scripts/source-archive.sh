@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Builds AIME-<version>-source.tar.gz, the corresponding source for one release:
-#   aime/                AIME at the release commit (original MIT + identified GPL sources)
+#   aime/                AIME at the release commit (git archive, MIT)
 #   upstream/librime/    librime at the pinned version (BSD-3-Clause)
 #   upstream/librime-*/  the three native plugins at the commits in
 #                        licenses/native-plugins/manifest.json (lua, predict: BSD-3-Clause;
@@ -9,8 +9,6 @@
 #   SOURCES.txt          where each part came from, with SHA-256 of every download
 #
 # The installer contains GPL-3.0 components, so every release attaches this archive.
-# Local ASR's native/transitive source inventory must be added before a release
-# that includes it; this existing Rime inventory is not a complete ASR source offer.
 # Usage: bash scripts/source-archive.sh <version> <out-dir> [<commit>]
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"

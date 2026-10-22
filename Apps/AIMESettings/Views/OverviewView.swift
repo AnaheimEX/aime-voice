@@ -101,6 +101,11 @@ struct OverviewView: View {
                 Text(model.hasImported ? "重新导入 RIME 配置" : "导入 RIME 配置").font(.headline)
                 Text("一键导入鼠须管等 RIME 目录的方案、词库、全拼 / 双拼自定义短语与词频（只读，短语自动合并）。")
                     .font(.callout).foregroundStyle(Theme.secondaryText)
+                ForEach(model.importWarnings, id: \.self) { warning in
+                    Label(warning, systemImage: "exclamationmark.triangle.fill")
+                        .font(.callout).foregroundStyle(Theme.warning)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
             Spacer()
             Button(model.hasImported ? "重新导入…" : "导入…") { showingImport = true }
@@ -266,9 +271,6 @@ struct VersionFooter: View {
     }
 
     @ViewBuilder private var updateControls: some View {
-        if Bundle.main.object(forInfoDictionaryKey: "AIMELocalIntegration") as? Bool == true {
-            LocalIntegrationControls()
-        } else {
         Toggle("自动检查更新", isOn: Binding(get: { model.updateState.autoCheck }, set: { model.setAutoUpdate($0) }))
             .toggleStyle(.checkbox).font(.caption)
             .help("每天请求一次 get.zool.app 上公开的版本清单，不发送任何输入内容")
@@ -282,7 +284,6 @@ struct VersionFooter: View {
         }
         .controlSize(.small)
         .disabled(model.updateChecking)
-        }
     }
 
     private func exportDiagnostics() {

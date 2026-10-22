@@ -1,8 +1,7 @@
 public import Foundation
 import CryptoKit
 
-/// One keyboard vocabulary entry: text + space-separated full pinyin (or a Latin code).
-/// Used by Rime tables only; never supplies voice recognition hints or replacements.
+/// One vocabulary entry: text + space-separated full pinyin (or a Latin code).
 public struct VocabularyEntry: Sendable, Hashable {
     public var text: String
     public var pinyin: String
@@ -17,29 +16,77 @@ public struct VocabularyEntry: Sendable, Hashable {
 
 public enum VocabularyParser {
     /// Parses a Rime `dict.yaml`, a `text<TAB>code[<TAB>weight]` table, or a plain word
-    /// list (pinyin computed locally). Comment and header lines are skipped.
+    /// list (pinyin computed locally). Declared dictionary columns override the TSV order;
+    /// malformed headers return no entries rather than guessing column roles.
     public static func parse(_ content: String) -> [VocabularyEntry] {
-        var lines = content.components(separatedBy: .newlines)
-        if let end = lines.firstIndex(where: { $0.trimmingCharacters(in: .whitespaces) == "..." }),
-           lines.prefix(end).contains(where: { $0.hasPrefix("name:") || $0 == "---" }) {
-            lines = Array(lines[(end + 1)...])
-        }
-        var seen = Set<String>()
+        let content = content.hasPrefix("\u{feff}") ? String(content.dropFirst()) : content
+        guard let (lines, declaredColumns) = splitHeader(content.components(separatedBy: .newlines)) else { return [] }
+        let textIndex = declaredColumns?.firstIndex(of: "text") ?? 0
+        let codeIndex = declaredColumns == nil ? 1 : declaredColumns?.firstIndex(of: "code")
+        let weightIndex = declaredColumns?.firstIndex(of: "weight")
+        var seen: [String: Int] = [:]
         var entries: [VocabularyEntry] = []
         for raw in lines {
             let line = raw.trimmingCharacters(in: .whitespaces)
             if line.isEmpty || line.hasPrefix("#") { continue }
-            let columns = line.components(separatedBy: "\t")
-            let text = columns[0].trimmingCharacters(in: .whitespaces)
+            // Split before trimming so empty fields do not shift the following columns.
+            let columns = raw.components(separatedBy: "\t").map { $0.trimmingCharacters(in: .whitespaces) }
+            func field(_ index: Int?) -> String {
+                guard let index, columns.indices.contains(index) else { return "" }
+                return columns[index]
+            }
+            let text = field(textIndex)
             guard !text.isEmpty, text.count <= 32 else { continue }
-            var code = columns.count > 1 ? columns[1].trimmingCharacters(in: .whitespaces) : ""
-            // `text code weight`, or `text code tag weight` (aime_tech): first numeric column.
-            let weight = columns.dropFirst(2).lazy.compactMap { Int($0.trimmingCharacters(in: .whitespaces)) }.first ?? 50
-            if code.isEmpty || Int(code) != nil { code = pinyin(for: text) ?? "" }
-            guard !code.isEmpty, seen.insert("\(text)\t\(code)").inserted else { continue }
-            entries.append(VocabularyEntry(text: text, pinyin: code.lowercased(), weight: weight))
+            var code = field(codeIndex)
+            // Undeclared tables accept `text weight`, `text code weight` and `text code tag weight` (aime_tech).
+            let weight = if declaredColumns != nil {
+                Int(field(weightIndex)) ?? 50
+            } else if columns.count == 2 {
+                Int(code) ?? 50
+            } else {
+                columns.dropFirst(2).lazy.compactMap { Int($0) }.first ?? 50
+            }
+            if code.isEmpty || (declaredColumns == nil && Int(code) != nil) { code = pinyin(for: text) ?? "" }
+            code = code.split(whereSeparator: \.isWhitespace).joined(separator: " ").lowercased()
+            guard !code.isEmpty else { continue }
+            let key = "\(text)\t\(code)"
+            if let index = seen[key] {
+                entries[index].weight = max(entries[index].weight, weight)
+            } else {
+                seen[key] = entries.count
+                entries.append(VocabularyEntry(text: text, pinyin: code, weight: weight))
+            }
         }
         return entries
+    }
+
+    private static func splitHeader(_ lines: [String]) -> (ArraySlice<String>, [String]?)? {
+        guard let end = lines.firstIndex(where: { $0.trimmingCharacters(in: .whitespaces) == "..." }),
+              lines.prefix(end).contains(where: { $0.hasPrefix("name:") || $0 == "---" }) else {
+            let first = lines.lazy.map { $0.trimmingCharacters(in: .whitespaces) }
+                .first { !$0.isEmpty && !$0.hasPrefix("#") }
+            // A truncated header is not a list of words to auto-annotate.
+            if first == "---" || first?.hasPrefix("name:") == true { return nil }
+            return (lines[...], nil)
+        }
+        let headerLines = lines.prefix(end)
+        // Parse only the small YAML header, never the vocabulary body.
+        guard headerLines.reduce(0, { $0 + $1.utf8.count + 1 }) <= 64 * 1024,
+              let header = try? ConfigValue.parse(yaml: headerLines.joined(separator: "\n")),
+              let fields = header.entries,
+              fields.filter({ $0.key == "columns" }).count <= 1 else { return nil }
+        var columns: [String]?
+        if let value = header["columns"] {
+            guard let values = value.listValue else { return nil }
+            var names: [String] = []
+            for value in values {
+                guard case let .string(name) = value, !name.isEmpty else { return nil }
+                names.append(name)
+            }
+            guard names.contains("text"), Set(names).count == names.count else { return nil }
+            columns = names
+        }
+        return (lines[(end + 1)...], columns)
     }
 
     /// Space-separated toneless pinyin for Chinese text; lowercase alphanumerics for Latin.
@@ -122,7 +169,7 @@ public enum SubscriptionError: Error, CustomStringConvertible {
 }
 
 /// Downloads subscriptions, merges them with the bundled aime_tech vocabulary and writes
-/// one learnable table per input layout (full pinyin, 小鹤双拼…) mounted into every enabled schema.
+/// one text table per input layout (full pinyin, 小鹤双拼…) mounted into every enabled schema.
 public struct SubscriptionManager: Sendable {
     public static let automaticInterval: TimeInterval = 12 * 3600
     public static let maxBytes = 20 << 20
@@ -130,7 +177,7 @@ public struct SubscriptionManager: Sendable {
     public static let maxBatchSize = 32
     /// One catalog, one download and at most one commit-date request per selected feed.
     public static let maxRequestsPerRefresh = 1 + maxBatchSize * 2
-    public static let tableName = LocalVocabularyCustomization.tableName
+    public static let tableName = "aime_online"
 
     public enum RefreshMode: Sendable, Equatable {
         case due, manual
@@ -438,50 +485,82 @@ public struct SubscriptionManager: Sendable {
     }
 
     public static func tableFileName(for layout: DoublePinyin?) -> String {
-        LocalVocabularyCustomization.tableFileName(for: layout)
+        layout.map { "\(tableName)_\($0.rawValue).txt" } ?? "\(tableName).txt"
+    }
+
+    /// Writes the per-layout tables and mounts them into `schemas` via the generated
+    /// layer. Returns the number of entries written.
+    @discardableResult
+    public func rebuild(schemas: [String]) throws -> Int {
+        // Same word from several sources: keep one row per (text, pinyin), highest weight.
+        var seen: [String: Int] = [:]
+        var entries: [VocabularyEntry] = []
+        for entry in allEntries() {
+            let key = entry.text + "\t" + entry.pinyin
+            if let index = seen[key] {
+                if entry.weight > entries[index].weight { entries[index] = entry }
+            } else {
+                seen[key] = entries.count
+                entries.append(entry)
+            }
+        }
+        let layouts: [DoublePinyin?] = [nil] + DoublePinyin.allCases
+        for layout in layouts {
+            var lines = [
+                "# Rime table", "# coding: utf-8", "#@/db_name\t\(Self.tableFileName(for: layout))", "#@/db_type\ttabledb", "#",
+                "# Generated by AIME from bundled and subscribed vocabularies — do not edit.", "#", "# 此行之后不能写注释",
+            ]
+            for entry in entries {
+                let isLatin = !entry.pinyin.contains(" ") && !entry.text.unicodeScalars.contains { (0x4E00...0x9FFF).contains($0.value) }
+                let code: String? = if isLatin { entry.pinyin }
+                    else if let layout { layout.code(forPinyin: entry.pinyin) }
+                    else { entry.pinyin.replacingOccurrences(of: " ", with: "") }
+                if let code, !code.isEmpty { lines.append("\(entry.text)\t\(code)\t\(entry.weight)") }
+            }
+            try (lines.joined(separator: "\n") + "\n").write(
+                to: paths.userDataDir.appendingPathComponent(Self.tableFileName(for: layout)), atomically: true, encoding: .utf8)
+        }
+        let layers = ConfigLayers(paths: paths)
+        // Schemas whose codes are not pinyin (t9, shape-based, other double pinyin layouts)
+        // cannot type these tables; make sure an older mount is gone.
+        for schema in schemas where !Self.canMount(schema) && layers.generatedValue(.schema(schema), keypath: Self.tableName) != nil {
+            try layers.updateGenerated(.schema(schema)) { patch in
+                patch.removeAll { $0.key == Self.tableName }
+                let translator = ConfigValue.string("table_translator@\(Self.tableName)")
+                if let index = patch.firstIndex(where: { $0.key == "engine/translators/+" }) {
+                    let rest = (patch[index].value.listValue ?? []).filter { $0 != translator }
+                    if rest.isEmpty { patch.remove(at: index) } else { patch[index].value = .list(rest) }
+                }
+            }
+        }
+        for schema in schemas where Self.canMount(schema) {
+            let file = Self.tableFileName(for: DoublePinyin.layout(forSchema: schema))
+            try layers.updateGenerated(.schema(schema)) { patch in
+                patch.removeAll { $0.key == Self.tableName }
+                patch.append(.init(Self.tableName, .map([
+                    .init("dictionary", ""), .init("user_dict", .string(String(file.dropLast(4)))), .init("db_class", "stabledb"),
+                    .init("enable_completion", false), .init("enable_sentence", false),
+                    .init("initial_quality", 6), .init("comment_format", .list([])),
+                ])))
+                let translator = ConfigValue.string("table_translator@\(Self.tableName)")
+                if !patch.contains(where: { $0.key == "engine/translators/+" && ($0.value.listValue ?? []).contains(translator) }) {
+                    let existing = patch.firstIndex { $0.key == "engine/translators/+" }
+                    if let existing {
+                        patch[existing].value = .list((patch[existing].value.listValue ?? []) + [translator])
+                    } else {
+                        patch.append(.init("engine/translators/+", .list([translator])))
+                    }
+                }
+            }
+        }
+        return entries.count
     }
 
     /// Full pinyin schemas and double pinyin layouts AIME can convert to.
     public static func canMount(_ schema: String) -> Bool {
-        LocalVocabularyCustomization.canMount(schema)
-    }
-
-    /// Writes only the customization plan's owned files and generated-layer mounts.
-    @discardableResult
-    public func rebuild(schemas: [String]) throws -> Int {
-        let plan = try LocalVocabularyCustomization.plan(entries: allEntries(), schemas: schemas)
-        try write(plan)
-        return plan.entryCount
-    }
-
-    private func write(_ plan: VocabularyOverlayPlan) throws {
-        let layers = ConfigLayers(paths: paths)
-        // Preflight every patch before writing any files: an ambiguous shared list
-        // must not leave half of a new vocabulary installed over the previous one.
-        let updates = try plan.schemas.map { schema in
-            let before = try layers.generatedPatch(.schema(schema))
-            let after = try LocalVocabularyCustomization.updating(before, for: schema, using: plan)
-            return (schema: schema, before: before, after: after)
-        }
-        for (name, content) in plan.files.sorted(by: { $0.key < $1.key }) {
-            try content.write(to: paths.userDataDir.appendingPathComponent(name), atomically: true, encoding: .utf8)
-        }
-        for update in updates where plan.mounts[update.schema] != nil || update.before != update.after {
-            try layers.updateGenerated(.schema(update.schema)) { patch in
-                patch = try LocalVocabularyCustomization.updating(patch, for: update.schema, using: plan)
-            }
-        }
-    }
-
-    private func snapshot(for plan: VocabularyOverlayPlan) throws -> VocabularyOverlaySnapshot {
-        let layers = ConfigLayers(paths: paths)
-        let files = Set(plan.files.keys.filter {
-            FileManager.default.fileExists(atPath: paths.userDataDir.appendingPathComponent($0).path)
-        })
-        let patches = try Dictionary(uniqueKeysWithValues: plan.schemas.map {
-            ($0, try layers.generatedPatch(.schema($0)))
-        })
-        return VocabularyOverlaySnapshot(existingFiles: files, patches: patches)
+        if DoublePinyin.layout(forSchema: schema) != nil { return true }
+        let nonPinyin = ["double_pinyin", "t9", "wubi", "cangjie", "stroke", "zhengma", "array", "bopomofo", "jyut"]
+        return !nonPinyin.contains { schema.hasPrefix($0) }
     }
 
     /// Called before every deploy: (re)generates the tables and mounts when the inputs
@@ -502,12 +581,15 @@ public struct SubscriptionManager: Sendable {
         }
         let schemas = mountSchemas()
         let signature = tableSignature(schemas: schemas, items: items)
-        if (try? String(contentsOf: signatureURL, encoding: .utf8)) == signature {
-            // Presence/mount requirements do not depend on rows. Keep the unchanged
-            // path cheap: no vocabulary parsing or double-pinyin conversion here.
-            let requirements = try LocalVocabularyCustomization.plan(entries: [], schemas: schemas)
-            if LocalVocabularyCustomization.isSatisfied(requirements, by: try snapshot(for: requirements)) { return false }
+        let tablesExist = ([nil] + DoublePinyin.allCases).allSatisfy {
+            FileManager.default.fileExists(atPath: paths.userDataDir.appendingPathComponent(Self.tableFileName(for: $0)).path)
         }
+        // The generated layer can be deleted by hand ("safe to delete"): re-mount if needed.
+        let layers = ConfigLayers(paths: paths)
+        let mounted = schemas.filter(Self.canMount).allSatisfy {
+            layers.generatedValue(.schema($0), keypath: Self.tableName) != nil
+        }
+        if tablesExist, mounted, (try? String(contentsOf: signatureURL, encoding: .utf8)) == signature { return false }
         try rebuild(schemas: schemas)
         try FileManager.default.createDirectory(at: signatureURL.deletingLastPathComponent(), withIntermediateDirectories: true)
         try signature.write(to: signatureURL, atomically: true, encoding: .utf8)
@@ -529,7 +611,7 @@ public struct SubscriptionManager: Sendable {
 
     func tableSignature(schemas: [String], items: [VocabularySubscription]) -> String {
         func digest(_ url: URL) -> String { (try? PackageManager.sha256(of: url)) ?? "missing" }
-        var parts = ["v3-learnable-table", schemas.sorted().joined(separator: ",")]
+        var parts = ["v3", schemas.sorted().joined(separator: ",")]
         if let shipped = paths.sharedDataDir?.appendingPathComponent("aime/aime_tech.tsv") { parts.append(digest(shipped)) }
         for item in items.sorted(by: { $0.id < $1.id }) { parts.append("\(item.id)=\(digest(cacheURL(item.id)))") }
         return parts.joined(separator: "|")

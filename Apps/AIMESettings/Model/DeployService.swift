@@ -27,18 +27,7 @@ enum Locations {
         return env.map { URL(fileURLWithPath: $0) }
     }
 
-    /// Stage rewrites the settings id to `…voicepreview.settings`. The running
-    /// input method uses the matching id; the production id would miss it and
-    /// the settings app would launch a second deployer.
-    static var preview: Bool {
-        Bundle.main.bundleIdentifier?.contains(".voicepreview") == true
-    }
-
-    static var inputMethodBundleID: String {
-        preview ? "app.zool.inputmethod.aime.voicepreview" : "app.zool.inputmethod.aime"
-    }
-
-    static var inputModeID: String { inputMethodBundleID + ".hans" }
+    static let inputMethodBundleID = "app.zool.inputmethod.aime"
 }
 
 /// Deploys through the running input method (so its sessions reload immediately), or
@@ -89,6 +78,13 @@ final class DeployService {
         }
         let result = await run(["sync"])
         return result.ok ? .success : .failure(Self.summarize(result.output))
+    }
+
+    /// After `import-squirrel --no-deploy`: the running input method deploys and merges the
+    /// imported snapshots itself (a second process cannot open its user dictionaries).
+    func deployImportedViaInputMethod() async -> Outcome {
+        await requestViaInputMethod(mode: "import", progress: { _, _ in })
+            ?? .failure("输入法未在 3 分钟内返回导入结果，可能仍在部署；请稍后查看日志 \(paths.logDir.path)")
     }
 
     /// Validates pending changes in a throwaway copy of the workspace.

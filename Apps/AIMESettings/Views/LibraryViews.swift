@@ -273,11 +273,7 @@ struct DictionariesView: View {
 
     var body: some View {
         Form {
-            Section {
-                PaneHeader(title: "文字词库", subtitle: "用于键盘输入的编码、候选和词频；内置雾凇拼音，支持订阅专题词库和安装输入方案。", symbol: "books.vertical")
-                Text("文字词库与语音词典独立维护。这里的词条、短语和词频不会提供给语音识别或语音纠错。")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
+            Section { PaneHeader(title: "词库", subtitle: "内置雾凇拼音；AI、互联网等专题词库按需订阅；其他输入方案一键安装。", symbol: "books.vertical") }
 
             Section("内置") {
                 LabeledContent {
@@ -398,7 +394,7 @@ private struct SubscriptionsSection: View {
                     Button("订阅", action: add).buttonStyle(.borderedProminent).disabled(url.isEmpty || !model.canAddSubscription)
                 }
                 .controlSize(.small)
-                Text("支持 RIME dict.yaml、「词条⇥编码⇥权重」表格或每行一个词；拼音自动生成，全拼与小鹤双拼均可打出。")
+                Text("支持 RIME dict.yaml、「词条⇥编码⇥权重」表格或每行一个词；拼音自动生成，全拼、小鹤双拼与自然码双拼均可打出。")
                     .font(.caption).foregroundStyle(.secondary)
             }
             if let activity = model.subscriptionActivity {
@@ -808,7 +804,7 @@ struct SyncView: View {
 
     var body: some View {
         Form {
-            Section { PaneHeader(title: "同步与备份", subtitle: "在多台 Mac 之间合并文字输入词频；备份和恢复文字输入配置，不包含语音设置与语音词典。", symbol: "arrow.triangle.2.circlepath") }
+            Section { PaneHeader(title: "同步与备份", subtitle: "在多台 Mac 之间合并用户词频；或把全部配置备份成一个文件，换机、重装时一键恢复。", symbol: "arrow.triangle.2.circlepath") }
 
             Section("同步目录") {
                 LabeledContent("位置") {
@@ -895,7 +891,7 @@ private struct BackupSection: View {
                 }
             }
         } footer: {
-            Text("备份只写到你选择的位置，不上传任何地方。不包含语音设置、语音词典、API Key、可重新生成的编译文件和随 App 附带的词库。")
+            Text("备份只写到你选择的位置，不上传任何地方。不包含 API Key、可重新生成的编译文件和随 App 附带的词库。")
                 .font(.caption).foregroundStyle(.secondary)
         }
         .sheet(item: Binding(get: { pending.map(PendingBackup.init) }, set: { if $0 == nil { pending = nil } })) { item in

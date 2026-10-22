@@ -1,5 +1,4 @@
 import AIMECore
-import AIMEVoiceHost
 import AIMEPanel
 import AppKit
 import Carbon
@@ -22,7 +21,6 @@ final class AIMEInputController: IMKInputController {
     private(set) var isComposing = false
     /// Active ⌃⌥P rewrite of the selected text (see AIMEInputController+Polish.swift).
     var polish: PolishSession?
-    let voiceOwner = InputOwner()
     /// Open quick menu (see AIMEInputController+Menu.swift).
     var quickMenu: QuickMenu?
     /// Holding one modifier on its own opens the quick menu (keyboard-only entry).
@@ -153,7 +151,6 @@ final class AIMEInputController: IMKInputController {
             applyAppOptions(newSession: false)
             applyPunctOption()
         }
-        engine.voiceFeature.activate(voiceOwner)
     }
 
     nonisolated override func deactivateServer(_ sender: Any!) {
@@ -169,7 +166,6 @@ final class AIMEInputController: IMKInputController {
             this.lastDeviceFlags = 0
             this.closeMenu()
             this.cancelPolish()
-            this.engine.voiceFeature.deactivate(this.voiceOwner)
             this.commitPending(client)
             if this.ownsPanel { this.engine.panel.hide() }
             this.engine.usage.flush()
@@ -208,7 +204,7 @@ final class AIMEInputController: IMKInputController {
     }
 
     nonisolated override func recognizedEvents(_ sender: Any!) -> Int {
-        Int(NSEvent.EventTypeMask([.keyDown, .keyUp, .flagsChanged]).rawValue)
+        Int(NSEvent.EventTypeMask([.keyDown, .flagsChanged]).rawValue)
     }
 
     // MARK: - Key handling
@@ -220,12 +216,8 @@ final class AIMEInputController: IMKInputController {
     }
 
     private func handle(_ event: NSEvent, client: (any IMKTextInput)?) -> Bool {
-        engine.activeController = self
-        if engine.voiceFeature.handle(event, owner: voiceOwner) == .consumed {
-            liveSession?.cancelModifierTap()
-            return true
-        }
         // Event type and session state only — never the characters typed.
+        engine.activeController = self
         guard let session = ensureSession() else {
             DebugLog.write("event type=\(event.type.rawValue) no-session maintaining=\(RimeEngine.shared.isMaintaining) initialized=\(RimeEngine.shared.isInitialized)")
             // Deploying (first run ≈ 10 s): keys pass through; say why once per deploy.

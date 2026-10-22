@@ -1,6 +1,6 @@
 # AIME 架构
 
-> 本文描述上游基础架构，不包含全部本机定制。基础架构记录日期：2026-09-29；本机语音、词库定制及更新模块见[模块契约](voice-module-design.md)，最新部署与剩余工作见[当前进度](voice-module-implementation.md)。
+> 状态：MVP（v0.1）· 最后更新 2026-09-29
 
 AIME 是 librime 的一个新前端：输入法本体用 InputMethodKit + AppKit 实现，配置管理用 SwiftUI 实现，
 两者之间只通过**文件**和**分布式通知**交互。引擎、词库、方案格式与 RIME 生态完全兼容。
