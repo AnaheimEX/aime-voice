@@ -34,7 +34,7 @@ def same_code(first, second, temporary_root):
 
 
 app = pathlib.Path(sys.argv[1])
-identity = "79C9B3548DA35EC4B1DD2E8B4BF80E07D58F68B2"
+identity = "AB8AB59CBD6D11B399BCFB9E9FDF06927DE61068"  # "AIME Local Code Signing", this Mac's login keychain
 # Sign embedded native dependencies before their containing bundles.
 for framework in sorted(app.rglob("*.framework"), key=lambda p: len(p.parts), reverse=True):
     if framework.name == "CTranscribe.framework":

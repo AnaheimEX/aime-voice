@@ -2,7 +2,15 @@
 
 更新日期：2026-10-22。本地 `main` 已合并上游 0.1.10，并按[与上游同步](upstream-merge.md)重整为三层：本地文件、上游文件里的白名单挂钩、`project.local.yml` 构建入口。当前本机预览已安装 **Build71**（0.1.10，CFBundleVersion 71）。最新完整产物为 `../dist/Build71/AIME Voice Preview.app`，2026-10-22 按用户要求删除全部旧版本产物与回退包（Build69、Build70）、`~/Library/Input Methods` 中的旧签名临时文件，并把旧版工作区 `~/Library/AIME` 移到废纸篓；当前预览数据 `~/Library/AIME Voice Preview` 和 `~/Library/Application Support/AIME` 保留。下方为本次结果与历史记录。
 
-## 2026-10-22 拆分大文件（源码，未构建安装）
+## 2026-10-22 新机器首次安装（Build72 已安装）
+
+- 这台 Mac 是新机器：没有安装过预览版，钥匙串里也没有原来那张本机证书。新建了自签名证书「AIME Local Code Signing」（SHA1 `AB8AB59CBD6D11B399BCFB9E9FDF06927DE61068`，有效期至 2036-10-19），并更新了 `sign-nested.py` 和 `sign-local.py`。签名检查仍要求三个组件的 identifier 与参考包一致，只把证书哈希换成新证书。designated requirement 因此与 Build71 不同，麦克风、辅助功能、语音识别等权限都要在这台机器上重新授权。
+- `build.sh` 新增 `AIME_PREVIEW_REFERENCE`，这次用 `../dist/Build71` 作参考包；`install.py` 支持首次安装。xcodegen 2.46.0 从官方发行版装到 `~/.local/bin`。Xcode 27.1 已同意许可并完成 `-runFirstLaunch`。
+- 用 Xcode 工具链补跑了上次跑不了的检查：`swift build`、`swift test`（11 项）和 VoiceFeature 检查都通过，其余结果与拆分时相同。两项失败仍是原来的：Laya 检查的 Python 评估部分，以及 CI 原生上屏检查命令找不到 `AIMEVoice` 模块。
+- `build.sh 72 --install` 完成。三个组件均为 Build72，完整包签名严格验证通过，主程序和设置已启动，输入源已注册启用，原输入源 `com.apple.inputmethod.SCIM.ITABC` 已恢复。构建日志仍有以往的 SwiftCompile “exit code 0” 提示。安装后发现 22:35 曾从 `dist/Build71` 直接打开过一个 Build71 进程（系统 App Translocation），已经停止。
+- 这台机器上没有 `~/Library/Application Support/AIME`，所以没有语音设置、模型或 ChatGPT 登录，需要在设置里重新配置。没有做真人录音验收。
+
+## 2026-10-22 拆分大文件（Build72 已安装）
 
 - 只做文件拆分，不改行为。新文件都放在原模块目录的顶层，因为 `scripts/tests` 的检查只编译 `Sources/AIMEVoice/*.swift`。
   - `VoiceProcessor` 拆为入口与结果类型（`VoiceProcessor.swift`）、润色提示词和本地规则（`VoicePolishRules.swift`）、主润色与决策／hedge 竞速（`VoicePolishPipeline.swift`）、模型请求（`VoiceTextCompletion.swift`）、决策分类与 Laya（`VoicePolishDecision.swift`）。
@@ -10,7 +18,7 @@
   - `CodexSubscriptionClient` 拆出 Responses 流式请求与解析（`CodexResponsesStream.swift`）和 ID token 校验（`CodexIDTokenVerification.swift`）。`test_codex_subscription.py` 的编译清单已加入这两个文件。
   - `VoiceSettingsPane` 的接口配置字段和润色提示词编辑器各成一个文件。
 - 跨文件使用的成员由 `private` 改为模块内 `internal`，公开接口不变。延迟日志里重复的毫秒换算统一为 `Duration.wholeMilliseconds`，和原来一样截断取整。按词比对新旧源码，除导入、extension 包装、注释和这两类改动外没有差异。
-- 本机没有 Xcode（`xcode-select` 指向 CommandLineTools，也没有 xcodegen），所以 `swift build`／`swift test`、`test_voice_feature.py` 和 `AIMEVoiceSettings` 都因缺少 SwiftUI 宏插件无法编译。设置页的三个文件只做了 `swiftc -parse`。`build.sh 72 --install` 没有运行，本机仍为 Build71。
+- 当时本机还没有 Xcode，`swift build`／`swift test`、`test_voice_feature.py` 和 `AIMEVoiceSettings` 都因缺少 SwiftUI 宏插件无法编译。装好 Xcode 后已补跑并通过，见上一节。
 - 拆分前后都通过：路由（92 次本机请求，无错误）、改写（12 次）、录音生命周期、Runtime、提供方、Laya 的 Swift 部分、Codex 协议和接缝检查。两次编译的唯一警告集合相同。`test_voice_laya.py` 的 Python 评估部分在拆分前就失败（`predict` 返回状态不是 `covered`），因此 Laya 的 Swift 部分是跳过该部分单独运行的。CI 中的原生上屏检查命令在拆分前就因找不到 `AIMEVoice` 模块而失败。
 - 项目从别处传入，`.build` 依赖缓存带 `com.apple.quarantine`，系统因此拒绝加载 CTranscribe。已只对 `Packages/AIMEVoiceKit/.build/voice-contracts/artifacts` 去除该属性，检查才能运行。
 

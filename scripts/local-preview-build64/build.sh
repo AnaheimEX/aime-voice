@@ -12,7 +12,8 @@ INSTALL="${2:-}"
 [[ "$BUILD" =~ ^[0-9]+$ ]] || { echo "BUILD must be a number" >&2; exit 1; }
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 HERE="$ROOT/scripts/local-preview-build64"
-REFERENCE="$HOME/Library/Input Methods/AIME Voice Preview.app"
+# Without an installed Preview (a new Mac), point AIME_PREVIEW_REFERENCE at a previous dist build.
+REFERENCE="${AIME_PREVIEW_REFERENCE:-$HOME/Library/Input Methods/AIME Voice Preview.app}"
 OUT="$(cd "$ROOT/.." && pwd)/dist/Build$BUILD"
 APP="$OUT/AIME Voice Preview.app"
 DERIVED="$ROOT/build/DerivedData"

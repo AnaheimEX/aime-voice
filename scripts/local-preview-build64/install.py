@@ -16,14 +16,16 @@ stage = args.stage.resolve(strict=True)
 helper = args.helper.resolve(strict=True)
 work = args.work.resolve(strict=True)
 installed = pathlib.Path.home() / "Library/Input Methods/AIME Voice Preview.app"
-old_version = str(plistlib.loads((installed / "Contents/Info.plist").read_bytes())["CFBundleVersion"])
+# A first install (new Mac) has no previous app to compare against or roll back to.
+first_install = not installed.exists()
+old_version = None if first_install else str(plistlib.loads((installed / "Contents/Info.plist").read_bytes())["CFBundleVersion"])
 new_version = str(plistlib.loads((stage / "Contents/Info.plist").read_bytes())["CFBundleVersion"])
-if not old_version.isdecimal() or not new_version.isdecimal() or int(new_version) <= int(old_version):
+if not new_version.isdecimal() or (old_version is not None and (not old_version.isdecimal() or int(new_version) <= int(old_version))):
     raise SystemExit("Expected a newer numeric build version")
 if stage == installed.resolve() or installed.resolve() in stage.parents:
     raise SystemExit("Staged app must be separate from installed app")
-previous = work / ("previous-build" + old_version + ".app")
-if previous.exists():
+previous = None if first_install else work / ("previous-build" + old_version + ".app")
+if previous is not None and previous.exists():
     raise SystemExit("Rollback destination already exists")
 subprocess.run(["codesign", "--verify", "--deep", "--strict", str(stage)], check=True)
 current = subprocess.check_output([str(helper), "current"], text=True).strip()
@@ -36,16 +38,19 @@ for line in processes.splitlines():
     if len(fields) == 2 and fields[1].startswith(str(installed) + "/"):
         os.kill(int(fields[0]), 15)
 time.sleep(1)
-installed.rename(previous)
+if previous is not None:
+    installed.rename(previous)
 try:
+    installed.parent.mkdir(parents=True, exist_ok=True)
     shutil.copytree(stage, installed, symlinks=True)
     subprocess.run(["codesign", "--verify", "--deep", "--strict", str(installed)], check=True)
     subprocess.run([str(helper), "register", str(installed)], check=True)
 except BaseException:
     if installed.exists():
         installed.rename(work / "failed-install.app")
-    previous.rename(installed)
-    subprocess.run([str(helper), "register", str(installed)])
+    if previous is not None:
+        previous.rename(installed)
+        subprocess.run([str(helper), "register", str(installed)])
     if current:
         subprocess.run([str(helper), "select", current])
     raise
@@ -53,5 +58,5 @@ if current:
     subprocess.run([str(helper), "select", current], check=True)
 subprocess.run(["open", "-a", str(installed)], check=True)
 subprocess.run(["open", str(installed / "Contents/Applications/AIME Settings.app")], check=True)
-print("Installed Build" + new_version + "; previous Build" + old_version + " retained at", previous)
+print("Installed Build" + new_version + ("; first install" if previous is None else "; previous Build" + old_version + " retained at " + str(previous)))
 print("Restored input source:", current)
