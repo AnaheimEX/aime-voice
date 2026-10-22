@@ -39,7 +39,6 @@
 
 - 引入 `AIMEVoiceHost`，`lazy var voiceFeature = VoiceFeature(host: LocalVoiceAdapter(engine: self))`。
 - `start()` 第一行读取一次 `voiceFeature`。
-- `showStatus(_:persistent:)` 增加 `persistent` 参数，为真时不安排自动隐藏。
 
 `Apps/AIME/AppDelegate.swift`：`applicationWillTerminate` 先调用 `voiceFeature.shutdown()`。
 

@@ -212,7 +212,8 @@ public final class VoiceFeature {
         if name == shortcuts.rewriteShortcut, voice == nil, shortcuts.enabled {
             if voicePreparation != nil { cancelVoice(); return true }
             voiceKeyState.consumeDown(event.keyCode)
-            if !event.isARepeat { startVoice(client: client, recordingKeyCode: event.keyCode, rewriting: true) }
+            // isARepeat is only defined for key events; a bare-modifier shortcut arrives as flagsChanged.
+            if event.type != .keyDown || !event.isARepeat { startVoice(client: client, recordingKeyCode: event.keyCode, rewriting: true) }
             return true
         }
         if name == toggle, voice != nil || shortcuts.enabled {
@@ -372,11 +373,17 @@ public final class VoiceFeature {
     private func commitVoice(_ text: String, session: VoiceInputSession) async {
         let commitStarted = ContinuousClock.now
         defer { if voice === session { cancelVoice() } }
+        // The cleanup above restores the candidate panel, which would hide a message shown just before it.
+        // Release the session first on a rejection; the message then hides itself and restores the panel.
+        func reject(_ message: String) {
+            if voice === session { cancelVoice(restorePanel: false) }
+            showStatus(message)
+        }
         if session.rewriteSelection == nil { await session.anchorTask?.value }
         guard !Task.isCancelled, voice === session, !IsSecureEventInputEnabled(),
               let snapshot, snapshot.canCommit else {
             voiceLatencyLogger.notice("commitRejected=inactive_or_composing")
-            showStatus("输入位置已变化，语音结果未写入")
+            reject("输入位置已变化，语音结果未写入")
             return
         }
         let current = snapshot.client
@@ -386,7 +393,7 @@ public final class VoiceFeature {
         else { rejection = session.target.insert(text, into: current) }
         if let rejection {
             voiceLatencyLogger.notice("commitRejected=\(rejection.rawValue, privacy: .public) app=\(current.bundleIdentifier() ?? "?", privacy: .public)")
-            showStatus(session.rewriteSelection?.preparationFailureMessage ?? "输入位置已变化，语音结果未写入")
+            reject(session.rewriteSelection?.preparationFailureMessage ?? "输入位置已变化，语音结果未写入")
             return
         }
         if let selection = session.rewriteSelection {

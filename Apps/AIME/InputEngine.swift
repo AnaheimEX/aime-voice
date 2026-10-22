@@ -599,11 +599,9 @@ final class InputEngine {
 
     // MARK: - Status bubble
 
-    func showStatus(_ text: String, persistent: Bool = false) {
+    func showStatus(_ text: String) {
         statusHideTask?.cancel()
-        statusHideTask = nil
         panel.show(PanelState(status: text), at: activeController?.cursorRect() ?? .zero)
-        guard !persistent else { return }
         statusHideTask = Task { @MainActor [weak self] in
             try? await Task.sleep(for: .milliseconds(900))
             guard !Task.isCancelled, let self else { return }

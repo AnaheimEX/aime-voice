@@ -89,7 +89,6 @@ require_text Apps/AIME/AIMEInputController.swift 'engine.voiceFeature.handle(eve
 require_text Apps/AIME/InputEngine.swift 'import AIMEVoiceHost'
 require_text Apps/AIME/InputEngine.swift 'lazy var voiceFeature'
 require_text Apps/AIME/InputEngine.swift '_ = voiceFeature'
-require_text Apps/AIME/InputEngine.swift 'showStatus(_ text: String, persistent: Bool = false)'
 require_text Apps/AIME/AppDelegate.swift 'voiceFeature.shutdown()'
 require_text Apps/AIMESettings/Views/RootView.swift 'case .voice: VoiceSettingsPane'
 require_text Apps/AIMESettings/Views/OverviewView.swift 'LocalIntegrationControls.replacesUpdater'

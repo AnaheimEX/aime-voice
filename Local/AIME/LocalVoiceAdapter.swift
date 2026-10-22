@@ -13,7 +13,7 @@ import InputMethodKit
         let clear = !controller.isComposing && controller.draft.isEmpty
         return InputSnapshot(client: client,
                              canStart: clear && controller.polish == nil && controller.quickMenu == nil,
-                             canCommit: clear)
+                             canCommit: clear && controller.polish == nil && controller.quickMenu == nil)
     }
 
     func present(_ effect: HostPresentation, for owner: InputOwner) {

@@ -72,13 +72,18 @@ private final class Connection: NSXPCConnection, @unchecked Sendable {
     var canCommit = true
     var canStart = true
     var messages: [String] = []
+    var effects: [String] = []
     func snapshot(for owner: InputOwner) -> InputSnapshot? {
         snapshotReads += 1
         guard owner == self.owner else { return nil }
         return InputSnapshot(client: client, canStart: canStart, canCommit: canCommit)
     }
     func present(_ effect: HostPresentation, for owner: InputOwner) {
-        if case .status(let message) = effect { messages.append(message) }
+        switch effect {
+        case .status(let message): messages.append(message); effects.append("status:" + message)
+        case .hideCandidates: effects.append("hideCandidates")
+        case .restorePanel: effects.append("restorePanel")
+        }
     }
 }
 @main struct VoiceFeatureCheck {
@@ -137,6 +142,8 @@ private final class Connection: NSXPCConnection, @unchecked Sendable {
         try await settle()
         precondition(host.client.document.text == "前文你好GitHub")
         precondition(feature.isIdle)
+        // Cleaning up the session restores the panel, which would hide the message at once: it must come last.
+        precondition(host.effects.last == "status:输入位置已变化，语音结果未写入", "rejection message was hidden by the panel restore: \(host.effects)")
         host.canCommit = true
 
         // Ordinary typing passes through and cancels pending speech.
@@ -155,6 +162,24 @@ private final class Connection: NSXPCConnection, @unchecked Sendable {
         feature.activate(InputOwner())
         precondition(host.snapshotReads == readsBeforeActivation, "activation must not synchronously inspect IMK client")
         feature.shutdown()
-        print("PASS VoiceFeature shortcut, commit, preparation-stop, duplicate readiness, stale event, focus rejection, ordinary-key cancellation")
+
+        // A bare-modifier rewrite shortcut arrives as flagsChanged, where reading NSEvent.isARepeat raises
+        // an exception that would abort the input method for every application.
+        var modifierSettings = settings
+        modifierSettings.rewriteShortcut = "Alt_R"
+        let modifierURL = root.appendingPathComponent("modifier-settings.json")
+        try JSONEncoder().encode(modifierSettings).write(to: modifierURL)
+        let modifierHost = Host()
+        let modifierFeature = VoiceFeature(host: modifierHost, settingsURL: modifierURL,
+            makeConnection: { Connection(machServiceName: "test.voice.modifier") }, feedback: { _ in }, captureAnchor: { _ in nil })
+        modifierFeature.activate(modifierHost.owner)
+        let optionDown = CGEvent(source: nil)!
+        optionDown.type = .flagsChanged
+        optionDown.flags = .maskAlternate
+        optionDown.setIntegerValueField(.keyboardEventKeycode, value: 61)
+        precondition(modifierFeature.handle(NSEvent(cgEvent: optionDown)!, owner: modifierHost.owner) == .consumed)
+        try await settle()
+        modifierFeature.shutdown()
+        print("PASS VoiceFeature shortcut, commit, preparation-stop, duplicate readiness, stale event, focus rejection, ordinary-key cancellation, bare-modifier rewrite key")
     }
 }
