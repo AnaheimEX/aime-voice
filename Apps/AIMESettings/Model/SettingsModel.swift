@@ -92,9 +92,9 @@ final class SettingsModel {
             guard let raw = TISGetInputSourceProperty(source, kTISPropertyInputSourceIsEnabled) else { return false }
             return CFBooleanGetValue(Unmanaged<CFBoolean>.fromOpaque(raw).takeUnretainedValue())
         }
-        guard let mode = enabled("app.zool.inputmethod.aime.hans") else { return .missing }
+        guard let mode = enabled(Locations.inputModeID) else { return .missing }
         guard mode else { return .notAdded }
-        return enabled("app.zool.inputmethod.aime") == false ? .needsRelogin : .ready
+        return enabled(Locations.inputMethodBundleID) == false ? .needsRelogin : .ready
     }
 
     /// Whether AIME can be switched to right now.

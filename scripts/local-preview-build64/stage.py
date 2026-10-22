@@ -4,6 +4,7 @@ import argparse
 import pathlib
 import plistlib
 import shutil
+import subprocess
 
 parser = argparse.ArgumentParser(description=__doc__)
 for name in ("root", "products", "reference", "destination", "cli"):
@@ -25,6 +26,12 @@ helpers = destination / "Contents/Helpers"
 helpers.mkdir(parents=True, exist_ok=True)
 shutil.copy2(cli / "aime", helpers / "aime")
 shutil.copytree(cli / "AIMEKit_AIMECore.bundle", helpers / "AIMEKit_AIMECore.bundle", dirs_exist_ok=True)
+# SwiftPM records only @loader_path. librime.1.dylib is in Contents/Frameworks.
+# scripts/build-app.sh adds the same rpath; without it `aime` aborts before deploy.
+subprocess.run(
+    ["install_name_tool", "-add_rpath", "@executable_path/../Frameworks", str(helpers / "aime")],
+    check=True,
+)
 
 bundles = [(destination, "app.zool.inputmethod.aime.voicepreview"),
            (settings, "app.zool.aime.voicepreview.settings"),

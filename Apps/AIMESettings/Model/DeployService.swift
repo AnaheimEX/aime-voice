@@ -27,7 +27,18 @@ enum Locations {
         return env.map { URL(fileURLWithPath: $0) }
     }
 
-    static let inputMethodBundleID = "app.zool.inputmethod.aime"
+    /// Stage rewrites the settings id to `…voicepreview.settings`. The running
+    /// input method uses the matching id; the production id would miss it and
+    /// the settings app would launch a second deployer.
+    static var preview: Bool {
+        Bundle.main.bundleIdentifier?.contains(".voicepreview") == true
+    }
+
+    static var inputMethodBundleID: String {
+        preview ? "app.zool.inputmethod.aime.voicepreview" : "app.zool.inputmethod.aime"
+    }
+
+    static var inputModeID: String { inputMethodBundleID + ".hans" }
 }
 
 /// Deploys through the running input method (so its sessions reload immediately), or

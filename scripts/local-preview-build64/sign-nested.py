@@ -1,5 +1,6 @@
 import pathlib
 import filecmp
+import plistlib
 import uuid
 import subprocess
 import sys
@@ -59,4 +60,12 @@ for library in sorted(app.rglob("*.dylib")):
 resources = app / "Contents/Helpers/AIMEKit_AIMECore.bundle"
 subprocess.run(["codesign", "--force", "--options", "runtime", "--timestamp=none", "--sign", identity, str(resources)], check=True)
 helper = app / "Contents/Helpers/aime"
-subprocess.run(["codesign", "--force", "--options", "runtime", "--timestamp=none", "--sign", identity, str(helper)], check=True)
+# The helper loads Contents/Frameworks/librime.1.dylib. Hardened runtime rejects
+# that library unless validation is disabled, the same as the input method.
+helper_entitlements = app.parent / "aime-helper.local.entitlements"
+helper_entitlements.write_bytes(plistlib.dumps({
+    "com.apple.security.cs.disable-library-validation": True,
+}))
+subprocess.run(["codesign", "--force", "--options", "runtime", "--timestamp=none", "--sign", identity,
+                "--entitlements", str(helper_entitlements), str(helper)], check=True)
+helper_entitlements.unlink()

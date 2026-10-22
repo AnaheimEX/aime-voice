@@ -1,6 +1,6 @@
 # 本机定制当前进度
 
-更新日期：2026-10-16。本地 `main` 已把上游 0.1.9 合并进来，语音模块仍只在这条分支上。当前本机预览已安装 **Build68**（0.1.9，CFBundleVersion 68）。三个组件均为 Build68，通用二进制为 x86_64 与 arm64，CLI 为 arm64。沿用原本机证书，三个 designated requirements 与替换前的 Build67 一致，完整包 `codesign --verify --deep --strict` 通过。主程序 PID 48992、设置 PID 48995、语音 XPC PID 49076 已从安装路径启动。输入源为 `app.zool.inputmethod.aime.voicepreview.hans`。最新完整产物为 `../dist/Build68/AIME Voice Preview.app`。Build67 产物、签名临时文件和安装回退包 `previous-build67.app` 已删除。Xcode DerivedData 与 SwiftPM 缓存仍保留。用户模型、词典和 `voice-settings.json` 未修改。未做真人录音或跨应用验收。下方为本次结果与历史记录。
+更新日期：2026-10-16。本地 `main` 已把上游 0.1.9 合并进来，语音模块仍只在这条分支上。当前本机预览已安装 **Build69**（0.1.9，CFBundleVersion 69）。三个组件均为 Build69，通用二进制为 x86_64 与 arm64，CLI 为 arm64。设置按自身 bundle id 识别 `app.zool.inputmethod.aime.voicepreview`，改配置后的自动部署和「重新部署」交给正在运行的输入法。CLI 增加 Frameworks rpath，并关闭 library validation。`aime --version` 输出版本 0.1.9。⇧⌘R 后 `build/default.yaml` 与 `build/rime_frost.schema.yaml` 于 21:48:42 重新生成，部署确认已清除，没有方案编译失败。输入源恢复为 `app.zool.inputmethod.aime.voicepreview.hans`。最新完整产物为 `../dist/Build69/AIME Voice Preview.app`。Build68 产物、签名临时文件和安装回退包已删除。Xcode DerivedData 与 SwiftPM 缓存仍保留。用户模型、词典和 `voice-settings.json` 未修改。未做真人录音。下方为历史记录。
 
 ## 2026-10-16 推测润色与长触发词（Build67 已安装）
 
