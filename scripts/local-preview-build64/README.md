@@ -25,6 +25,6 @@ scripts/local-preview-build64/build.sh <构建号> [--install]
 - `sign-nested.py APP`：恢复 CTranscribe framework 的版本链接，签署 framework、dylib、CLI 资源包和 CLI（CLI 关闭 library validation）。Xcode 可能只重签顶层二进制；若与版本副本不同，先在临时副本按架构统一临时签名，逐字节比较，确认代码一致后才规范布局。
 - `sign-local.py APP REFERENCE ROOT`：用本机证书签名，并按参考包的 designated requirement 验证每个组件：identifier 必须一致，证书哈希换成本机证书。设置及 XPC 关闭 library validation；主程序在上游 `AIME.entitlements` 之上追加 `com.apple.security.device.audio-input`。最后执行完整包 `codesign --verify --deep --strict`。签名需符合当次授权；不会枚举或导出密钥。
 - `input-source.swift`：提供 current、select、register；安装前编译为 `input-source`。
-- `install.py APP --helper INPUT_SOURCE --work WORK`：没有已安装的预览时按首次安装处理，不做版本比较和旧包备份；否则要求数值构建号递增，验证候选签名，保存并切换输入源，停止已安装 Preview 进程，将旧包移至工作目录，复制／验证／注册新包；失败恢复旧包，成功恢复原输入源并启动主程序与设置。
+- `install.py APP --helper INPUT_SOURCE --work WORK`：没有已安装的预览时按首次安装处理，不做版本比较和旧包备份；否则要求数值构建号递增，验证候选签名，保存并切换输入源，停止已安装 Preview 进程，将旧包移至工作目录，复制／验证／注册新包；失败恢复旧包，成功恢复原输入源并启动主程序与设置。成功后把 `dist` 里的副本压缩为 `AIME Voice Preview.app.zip` 并删除 `.app`，再列出仍在 LaunchServices 登记的其他同身份副本。同一 bundle id 只能有一份 `.app`：不要把它复制到 `/Applications` 或直接双击 zip 解出的副本，否则 `imklaunchagent` 可能连错副本，打字失效。
 
 预览身份在运行时由 `LocalBuildInfo` 从 bundle id 识别：数据目录为 `~/Library/AIME Voice Preview/Rime`，日志为 `~/Library/Logs/AIME Voice Preview`，与正式版 AIME 互不干扰。完整交付记录见 `docs/voice-module-implementation.md`。

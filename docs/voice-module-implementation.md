@@ -10,6 +10,7 @@
 - `build.sh 72 --install` 完成。三个组件均为 Build72，完整包签名严格验证通过，主程序和设置已启动，输入源已注册启用，原输入源 `com.apple.inputmethod.SCIM.ITABC` 已恢复。构建日志仍有以往的 SwiftCompile “exit code 0” 提示。安装后发现 22:35 曾从 `dist/Build71` 直接打开过一个 Build71 进程（系统 App Translocation），已经停止。
 - 第一次安装后输入法没有出现在菜单里：项目文件和 `dist/Build71` 都带着 `com.apple.quarantine`，被复制进了 App（154 个文件），系统不会注册被隔离的自签名输入法。去掉已安装 App 和项目文件的隔离属性后重新注册，`app.zool.inputmethod.aime.voicepreview.hans` 已启用、可选择。签名不受影响。`build.sh` 在签名前增加了 `xattr -dr com.apple.quarantine`。
 - 注册后仍无法打字：LaunchServices 里同一 bundle id 登记了三份（已安装的 Build72、`dist/Build71`、以及 22:35 直接打开 Build71 时的 App Translocation 副本），`imklaunchagent` 拉起输入法时报 `LaunchInputMethod() Error, status=-50`，客户端拿到的都是失效连接。用 `lsregister -u` 注销两个旧副本、重启 `imklaunchagent` 后，系统正常拉起 AIME；在文本编辑里模拟输入 `nihao` + 空格，上屏“你好”。`install.py` 在安装成功后会注销 `dist` 里那份副本。
+- 之后又出现无法打字：Build72 被复制到了 `/Applications` 并在后台运行，和已安装的那份抢同一个输入法连接名；`dist` 里的副本也被 Spotlight／Finder 重新登记。主程序是没有窗口的输入法服务（`LSUIElement`），双击只会在后台启动，看起来像“打不开”。已把 `/Applications` 的副本移到废纸篓、注销所有其他登记，系统里只剩 `~/Library/Input Methods` 这一份；`/Applications/AIME Settings.app` 改为指向内置设置 App 的符号链接。`install.py` 现在安装成功后把 `dist` 里的副本压缩为 `AIME Voice Preview.app.zip` 并删除 `.app`，最后列出仍登记着的其他同身份副本。
 - 这台机器上没有 `~/Library/Application Support/AIME`，所以没有语音设置、模型或 ChatGPT 登录，需要在设置里重新配置。没有做真人录音验收。
 
 ## 2026-10-22 拆分大文件（Build72 已安装）

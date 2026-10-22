@@ -3,6 +3,7 @@ import argparse
 import os
 import pathlib
 import plistlib
+import re
 import shutil
 import subprocess
 import time
@@ -56,10 +57,23 @@ except BaseException:
     raise
 if current:
     subprocess.run([str(helper), "select", current], check=True)
-# The staged copy shares the bundle id. If LaunchServices keeps it, imklaunchagent can
-# resolve the input method to that copy and fail to launch it (status -50).
-subprocess.run(["/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister",
-                "-u", str(stage)])
+# Any other copy with this bundle id (the staged one, one dragged to /Applications) lets
+# imklaunchagent resolve the input method to the wrong bundle or run two servers on one
+# connection name; typing then stops working. Keep the staged build only as a zip.
+lsregister = "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
+subprocess.run(["ditto", "-c", "-k", "--keepParent", str(stage), str(stage) + ".zip"], check=True)
+subprocess.run([lsregister, "-u", str(stage)])
+shutil.rmtree(stage)
+bundle_id = plistlib.loads((installed / "Contents/Info.plist").read_bytes())["CFBundleIdentifier"]
+others = []
+path = None
+for line in subprocess.run([lsregister, "-dump"], capture_output=True, text=True).stdout.splitlines():
+    if line.startswith("path:"):
+        path = line.split(":", 1)[1].rsplit(" (0x", 1)[0].strip()
+    elif re.fullmatch(r"identifier:\s+" + re.escape(bundle_id), line.strip()) and path and pathlib.Path(path) != installed:
+        others.append(path)
+for other in sorted(set(others)):
+    print("WARNING: another copy of", bundle_id, "is registered:", other, "- remove it, then: lsregister -u <path>")
 subprocess.run(["open", "-a", str(installed)], check=True)
 subprocess.run(["open", str(installed / "Contents/Applications/AIME Settings.app")], check=True)
 print("Installed Build" + new_version + ("; first install" if previous is None else "; previous Build" + old_version + " retained at " + str(previous)))
