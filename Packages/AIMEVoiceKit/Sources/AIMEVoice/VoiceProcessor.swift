@@ -60,6 +60,23 @@ public struct VoiceProcessor: Sendable {
                                          + Int(elapsed.components.attoseconds / 1_000_000_000_000_000))
     }
 
+    /// Translate an already selected span. Never starts recognition or consults the decision service.
+    public func translate(_ selectedText: String, settings: VoiceSettings) async throws -> VoiceProcessingResult {
+        try Task.checkCancellation()
+        let started = ContinuousClock.now
+        guard !selectedText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw VoiceHTTP.Failure.empty }
+        guard selectedText.count <= 2000 else { throw ProcessingFailure.translateTooLong }
+        guard settings.llm.isConfigured else { throw ProcessingFailure.missingModel }
+        let request = VoiceTranslate.completionRequest(text: selectedText, settings: settings)
+        let output = try await Self.complete(endpoint: settings.llm, instructions: request.instructions, text: request.text)
+        try Task.checkCancellation()
+        let elapsed = started.duration(to: .now)
+        return VoiceProcessingResult(text: output, route: "field_translate", decisionInvoked: false,
+                                     decisionAdopted: false,
+                                     elapsedMilliseconds: Int(elapsed.components.seconds * 1000)
+                                         + Int(elapsed.components.attoseconds / 1_000_000_000_000_000))
+    }
+
     /// Validate the selected model with a small fixed request, independent of task prompts.
     public func testPolish(text: String, settings: VoiceSettings) async throws -> VoiceProcessingResult {
         guard settings.llm.isConfigured else { throw ProcessingFailure.missingModel }
@@ -424,12 +441,13 @@ public struct VoiceProcessor: Sendable {
     }
 
     private enum ProcessingFailure: LocalizedError {
-        case missingModel, missingDecisionModel, missingPrompt, unsupportedContext, invalidDecision, rewriteTooLong, thinkingNotDisabled
+        case missingModel, missingDecisionModel, missingPrompt, unsupportedContext, invalidDecision, rewriteTooLong, translateTooLong, thinkingNotDisabled
         var errorDescription: String? {
             switch self {
             case .thinkingNotDisabled: "服务未关闭思考模式，结果未上屏；请换用支持非思考模式的模型"
             case .missingModel: "请先配置润色模型的接口地址和模型 ID"
             case .rewriteTooLong: "改写选区最多2000字，改写指令最多500字，请缩小选区或精简指令"
+            case .translateTooLong: "翻译选区最多2000字，请缩小选区"
             case .missingDecisionModel: "请先配置决策模型的接口地址并拉取选择模型"
             case .missingPrompt: "自定义模式需要填写提示词"
             case .unsupportedContext: "此语音模式仅支持 {text}，不支持 {selected} 或 {clipboard} 上下文"

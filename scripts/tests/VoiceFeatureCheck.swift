@@ -139,6 +139,25 @@ private final class Connection: NSXPCConnection, @unchecked Sendable {
         precondition(feature.isIdle)
         host.canCommit = true
 
+        // Translation reads text. It must not open a recognition session.
+        let requestsBeforeTranslate = connection.service.requests.count
+        let stoppedBeforeTranslate = connection.service.stopped.count
+        let messagesBeforeTranslate = host.messages.count
+        let translateKey = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [.control, .option], timestamp: 0, windowNumber: 0, context: nil, characters: "t", charactersIgnoringModifiers: "t", isARepeat: false, keyCode: 17)!
+        precondition(feature.handle(translateKey, owner: host.owner) == .consumed, "translate shortcut passed through")
+        var settled = false
+        for _ in 0..<50 {
+            if feature.isIdle { settled = true; break }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        precondition(settled, "translate shortcut left a session active")
+        precondition(connection.service.requests.count == requestsBeforeTranslate, "translate shortcut started recognition")
+        precondition(connection.service.stopped.count == stoppedBeforeTranslate, "translate shortcut stopped a recorder")
+        precondition(host.messages.count > messagesBeforeTranslate, "translate shortcut produced no status")
+        let translateRelease = NSEvent.keyEvent(with: .keyUp, location: .zero, modifierFlags: [.control, .option], timestamp: 0, windowNumber: 0, context: nil, characters: "t", charactersIgnoringModifiers: "t", isARepeat: false, keyCode: 17)!
+        precondition(feature.handle(translateRelease, owner: host.owner) == .consumed)
+        precondition(host.client.document.text == "前文你好GitHub", "translate shortcut changed the field without a model result")
+
         // Ordinary typing passes through and cancels pending speech.
         precondition(feature.handle(key, owner: host.owner) == .consumed)
         try await settle()
@@ -155,6 +174,6 @@ private final class Connection: NSXPCConnection, @unchecked Sendable {
         feature.activate(InputOwner())
         precondition(host.snapshotReads == readsBeforeActivation, "activation must not synchronously inspect IMK client")
         feature.shutdown()
-        print("PASS VoiceFeature shortcut, commit, preparation-stop, duplicate readiness, stale event, focus rejection, ordinary-key cancellation")
+        print("PASS VoiceFeature shortcut, commit, preparation-stop, duplicate readiness, stale event, focus rejection, translate without recognition, ordinary-key cancellation")
     }
 }

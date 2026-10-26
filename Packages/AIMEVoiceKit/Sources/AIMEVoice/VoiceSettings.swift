@@ -88,6 +88,11 @@ public struct VoiceSettings: Codable, Sendable, Equatable {
     public var toggleShortcut = VoiceShortcutConfiguration().toggleShortcut
     public var cancelShortcut = VoiceShortcutConfiguration().cancelShortcut
     public var rewriteShortcut = VoiceShortcutConfiguration().rewriteShortcut
+    public var translateShortcut = VoiceShortcutConfiguration().translateShortcut
+    /// Selection hotkey target. Not the free-text language used after speech recognition.
+    public var translateTargetLanguage: VoiceTranslateLanguage = .english
+    public var translatePromptEn = ""
+    public var translatePromptJa = ""
     public var recordingGesture = "toggle"
     public var speechBackend: VoiceSpeechBackend = .local
     public var interfazeAPIKey = ""
@@ -107,6 +112,32 @@ public struct VoiceSettings: Codable, Sendable, Equatable {
     public var polishStyle: VoicePolishStyle?
     public var effectivePolishStyle: VoicePolishStyle {
         polishStyle ?? VoiceProcessor.inferredPolishStyle(polishPrompt)
+    }
+
+    public func savedTranslatePrompt(for language: VoiceTranslateLanguage) -> String {
+        switch language {
+        case .english: translatePromptEn
+        case .japanese: translatePromptJa
+        }
+    }
+
+    /// Empty or whitespace-only custom text uses the built-in prompt for the active language.
+    public var effectiveTranslatePrompt: String {
+        let saved = savedTranslatePrompt(for: translateTargetLanguage).trimmingCharacters(in: .whitespacesAndNewlines)
+        return saved.isEmpty ? VoiceTranslate.instructions(for: translateTargetLanguage) : saved
+    }
+
+    public var activeTranslatePromptIsCustom: Bool {
+        !savedTranslatePrompt(for: translateTargetLanguage).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    public mutating func setTranslatePrompt(_ prompt: String, for language: VoiceTranslateLanguage) {
+        let trimmed = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        let stored = trimmed == VoiceTranslate.instructions(for: language) ? "" : trimmed
+        switch language {
+        case .english: translatePromptEn = stored
+        case .japanese: translatePromptJa = stored
+        }
     }
     public var decisionMode = "off"
     public var decisionProtocol = "jev"
@@ -144,7 +175,8 @@ public struct VoiceSettings: Codable, Sendable, Equatable {
 
     public func save(to url: URL) throws {
         try vocabulary.validate()
-        try VoiceShortcutConfiguration.validate(toggle: toggleShortcut, cancel: cancelShortcut, rewrite: rewriteShortcut)
+        try VoiceShortcutConfiguration.validate(toggle: toggleShortcut, cancel: cancelShortcut,
+                                                rewrite: rewriteShortcut, translate: translateShortcut)
         let directory = url.deletingLastPathComponent()
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true,
                                                 attributes: [.posixPermissions: 0o700])
@@ -171,7 +203,8 @@ public struct VoiceSettings: Codable, Sendable, Equatable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case volcSecondPass, enabled, toggleShortcut, cancelShortcut, rewriteShortcut, recordingGesture, asr, llm, mode, targetLanguage, customPrompt, polishPrompt
+        case volcSecondPass, enabled, toggleShortcut, cancelShortcut, rewriteShortcut, translateShortcut, recordingGesture, asr, llm, mode, targetLanguage, customPrompt, polishPrompt
+        case translateTargetLanguage, translatePromptEn, translatePromptJa
         case decisionMode, decisionProtocol, decisionBudgetMilliseconds, decision
         case vocabulary, polishStyle, localSpeechModel, speechBackend, interfazeAPIKey
         case asrProfiles, llmProfiles, decisionProfiles
@@ -185,6 +218,7 @@ public struct VoiceSettings: Codable, Sendable, Equatable {
         toggleShortcut = try container.decodeIfPresent(String.self, forKey: .toggleShortcut) ?? toggleShortcut
         cancelShortcut = try container.decodeIfPresent(String.self, forKey: .cancelShortcut) ?? cancelShortcut
         rewriteShortcut = try container.decodeIfPresent(String.self, forKey: .rewriteShortcut) ?? rewriteShortcut
+        translateShortcut = try container.decodeIfPresent(String.self, forKey: .translateShortcut) ?? translateShortcut
         recordingGesture = try container.decodeIfPresent(String.self, forKey: .recordingGesture) ?? recordingGesture
         speechBackend = try container.decodeIfPresent(VoiceSpeechBackend.self, forKey: .speechBackend) ?? speechBackend
         interfazeAPIKey = try container.decodeIfPresent(String.self, forKey: .interfazeAPIKey) ?? interfazeAPIKey
@@ -196,6 +230,12 @@ public struct VoiceSettings: Codable, Sendable, Equatable {
         decisionProfiles = try container.decodeIfPresent(VoiceProviderProfiles.self, forKey: .decisionProfiles) ?? decisionProfiles
         mode = try container.decodeIfPresent(String.self, forKey: .mode) ?? mode
         targetLanguage = try container.decodeIfPresent(String.self, forKey: .targetLanguage) ?? targetLanguage
+        if let storedLanguage = try container.decodeIfPresent(String.self, forKey: .translateTargetLanguage),
+           let language = VoiceTranslateLanguage(stored: storedLanguage) {
+            translateTargetLanguage = language
+        }
+        translatePromptEn = try container.decodeIfPresent(String.self, forKey: .translatePromptEn) ?? translatePromptEn
+        translatePromptJa = try container.decodeIfPresent(String.self, forKey: .translatePromptJa) ?? translatePromptJa
         customPrompt = try container.decodeIfPresent(String.self, forKey: .customPrompt) ?? customPrompt
         polishPrompt = try container.decodeIfPresent(String.self, forKey: .polishPrompt) ?? polishPrompt
         polishStyle = try container.decodeIfPresent(VoicePolishStyle.self, forKey: .polishStyle) ?? effectivePolishStyle

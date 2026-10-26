@@ -12,6 +12,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Added
+
+- Settings › Translate: record a shortcut of its own (⌃⌥T by default), pick English or Japanese, and edit the prompt for that language. The shortcut does not start the microphone. It sends the current selection, or the latest confirmed dictation, to the text model and writes the translation back. This is separate from “Translate after dictation” under text cleanup.
+
 ## [0.1.10] - 2026-10-20
 
 > Stable release · Developer ID signed · notarized by Apple

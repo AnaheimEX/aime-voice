@@ -12,6 +12,7 @@ public struct VoiceSettingsPane: View {
     @State private var saveMessage: String?
     @State private var saveFailed = false
     @State private var showingPolishPrompt = false
+    @State private var showingTranslatePrompt = false
     @State private var showingVocabulary = false
 
     public var body: some View {
@@ -59,6 +60,31 @@ public struct VoiceSettingsPane: View {
                     }
                 }
             }
+            Section("翻译") {
+                LabeledContent("翻译快捷键") {
+                    HStack {
+                        VoiceKeyRecorder(value: settings.translateShortcut) { settings.translateShortcut = $0 }
+                        Button("恢复默认") { settings.translateShortcut = VoiceSettings().translateShortcut }.buttonStyle(.borderless)
+                    }
+                }
+                Picker("目标语言", selection: $settings.translateTargetLanguage) {
+                    Text("英文").tag(VoiceTranslateLanguage.english)
+                    Text("日文").tag(VoiceTranslateLanguage.japanese)
+                }
+                LabeledContent("翻译提示词") {
+                    HStack {
+                        Text("\(settings.translateTargetLanguage.title) · \(settings.activeTranslatePromptIsCustom ? "自定义规则" : "默认规则")")
+                            .foregroundStyle(.secondary)
+                        Button("编辑提示词…") { showingTranslatePrompt = true }
+                            .buttonStyle(.bordered)
+                            .sheet(isPresented: $showingTranslatePrompt) {
+                                VoiceTranslatePromptEditor(settings: $settings)
+                            }
+                    }
+                }
+                Text("不录音。读取当前选中的文字，或已验证的最近一次听写，用下面的文本模型译成所选语言后写回。切换语言会换用该语言自己的提示词。与「听写后翻译」无关。")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             Section("语音识别") {
                 Picker("识别方式", selection: $settings.speechBackend) {
                     Text("本地模型 · Cohere / Whisper").tag(VoiceSpeechBackend.local)
@@ -98,7 +124,7 @@ public struct VoiceSettingsPane: View {
             Section("文字整理") {
                 Picker("处理方式", selection: $settings.mode) {
                     Text("语音润色").tag("polish")
-                    Text("翻译").tag("translate")
+                    Text("听写后翻译").tag("translate")
                     Text("自定义转换").tag("custom")
                     Text("仅转写").tag("raw")
                 }
@@ -119,17 +145,17 @@ public struct VoiceSettingsPane: View {
                     LabeledContent("目标语言") {
                         TextField("英文", text: $settings.targetLanguage).frame(maxWidth: 240)
                     }
+                    Text("录音识别结束后，把识别结果译成这里填写的语言。选中已有文字请用上面的翻译快捷键，不会打开麦克风。")
+                        .font(.caption).foregroundStyle(.secondary)
                 }
                 if settings.mode == "custom" {
                     TextEditor(text: $settings.customPrompt).font(.body).frame(minHeight: 120)
                         .overlay(RoundedRectangle(cornerRadius: 6).stroke(.quaternary))
                 }
-                if settings.mode != "raw" {
-                    VoiceEndpointFields(endpoint: $settings.llm, profiles: $settings.llmProfiles, purpose: .text)
-                    VoiceModelTestControls(settings: settings, kind: .polish)
-                    Text("润色与改写固定关闭思考模式。模型不支持关闭时，请选择非思考模型。")
-                        .font(.caption).foregroundStyle(.secondary)
-                }
+                VoiceEndpointFields(endpoint: $settings.llm, profiles: $settings.llmProfiles, purpose: .text)
+                VoiceModelTestControls(settings: settings, kind: .polish)
+                Text("润色、听写后翻译、自定义转换和翻译快捷键共用这个文本模型。仅转写不会调用它。润色与改写固定关闭思考模式。模型不支持关闭时，请选择非思考模型。")
+                    .font(.caption).foregroundStyle(.secondary)
             }
             Section("决策加速") {
                 Picker("运行方式", selection: $settings.decisionMode) {
@@ -466,6 +492,72 @@ private struct VoicePolishPromptEditor: View {
         var updated = settings
         updated.polishPrompt = prompt == VoiceProcessor.polishInstructions ? "" : prompt
         updated.polishStyle = updated.effectivePolishStyle
+        do {
+            try updated.save()
+            settings = updated
+            DistributedNotificationCenter.default().postNotificationName(
+                Notification.Name(VoiceSettings.changedNotification), object: nil)
+            dismiss()
+        } catch {
+            errorMessage = "保存失败：\(error.localizedDescription)"
+        }
+    }
+}
+
+private struct VoiceTranslatePromptEditor: View {
+    @Environment(\.voiceSettingsStyle) private var style
+    @Binding var settings: VoiceSettings
+    @Environment(\.dismiss) private var dismiss
+    @State private var draft: String
+    @State private var errorMessage: String?
+    private let language: VoiceTranslateLanguage
+
+    init(settings: Binding<VoiceSettings>) {
+        _settings = settings
+        let language = settings.wrappedValue.translateTargetLanguage
+        self.language = language
+        let saved = settings.wrappedValue.savedTranslatePrompt(for: language)
+        _draft = State(initialValue: saved.isEmpty ? VoiceTranslate.instructions(for: language) : saved)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("翻译提示词 · \(language.title)").font(.title2.bold())
+            Text("只作用于翻译快捷键。英文和日文各自保存一份，切换目标语言时换用对应的一份。")
+                .font(.callout).foregroundStyle(.secondary)
+            TextEditor(text: $draft)
+                .font(.body)
+                .padding(8)
+                .overlay(RoundedRectangle(cornerRadius: 8).stroke(.quaternary))
+                .frame(minHeight: 300)
+                .accessibilityLabel("翻译提示词内容")
+            if let errorMessage {
+                Text(errorMessage).foregroundStyle(style.warning).font(.callout)
+            }
+            HStack {
+                Button("恢复默认") {
+                    draft = VoiceTranslate.instructions(for: language)
+                    errorMessage = nil
+                }
+                Spacer()
+                Button("取消") { dismiss() }.keyboardShortcut(.cancelAction)
+                Button("保存并生效") { save() }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+        }
+        .padding(24)
+        .frame(width: 680, height: 560)
+    }
+
+    private func save() {
+        let prompt = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !["{selected}", "{clipboard}"].contains(where: { prompt.contains($0) }) else {
+            errorMessage = "翻译提示词不支持 {selected} 或 {clipboard}"
+            return
+        }
+        var updated = settings
+        updated.setTranslatePrompt(prompt, for: language)
         do {
             try updated.save()
             settings = updated

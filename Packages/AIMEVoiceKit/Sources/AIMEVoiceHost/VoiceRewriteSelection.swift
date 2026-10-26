@@ -271,15 +271,16 @@ extension VoiceRewriteAccessibility {
     }
 
     public static func preparationFailureMessage(client: any IMKTextInput, origin: VoiceDictationOrigin?,
-                                                 accessibility: (any VoiceRewriteAccessibility)? = nil) -> String {
+                                                 accessibility: (any VoiceRewriteAccessibility)? = nil,
+                                                 action: String = "改写") -> String {
         let adapter = accessibility ?? origin?.accessibility ?? VoiceSystemRewriteAccessibility.shared
         if !adapter.isTrusted {
             return "系统当前未授予正在运行的“艾么语音测试”辅助功能权限，请在系统设置核对授权后重新启动输入法"
         }
         guard let current = adapter.focusedField() else { return "无法读取当前输入框，请重新聚焦后重试或手动选中文字" }
-        guard current.usable else { return "当前输入框不可编辑或受保护，未改写" }
-        if let origin, !origin.matches(current) { return "输入框或原文已变化，请手动选中文字改写" }
-        return origin == nil ? "没有已验证的最近听写内容，请先听写或手动选中文字" : "无法安全定位原文，请手动选中文字改写"
+        guard current.usable else { return "当前输入框不可编辑或受保护，未\(action)" }
+        if let origin, !origin.matches(current) { return "输入框或原文已变化，请手动选中文字\(action)" }
+        return origin == nil ? "没有已验证的最近听写内容，请先听写或手动选中文字" : "无法安全定位原文，请手动选中文字\(action)"
     }
 }
 
