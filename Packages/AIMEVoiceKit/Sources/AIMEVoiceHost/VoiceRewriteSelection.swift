@@ -46,6 +46,9 @@ private func validVoiceRange(_ range: NSRange, in text: String) -> Bool {
 @MainActor public protocol VoiceRewriteAccessibility: AnyObject {
     var isTrusted: Bool { get }
     func focusedField() -> VoiceRewriteFieldSnapshot?
+    /// Field in the IMK client's app. The system-wide focus element is often nil or
+    /// not that editor while this input method is the text input source.
+    func focusedField(matching client: (any IMKTextInput)?) -> VoiceRewriteFieldSnapshot?
     func select(_ range: NSRange, in field: VoiceRewriteFieldSnapshot) -> Bool
     func replaceSelectedText(_ text: String, in field: VoiceRewriteFieldSnapshot) -> Bool
     func replaceValue(_ text: String, in field: VoiceRewriteFieldSnapshot) -> Bool
@@ -54,6 +57,9 @@ private func validVoiceRange(_ range: NSRange, in text: String) -> Bool {
 
 extension VoiceRewriteAccessibility {
     public func waitForUpdate() async { try? await Task.sleep(for: .milliseconds(40)) }
+    public func focusedField(matching client: (any IMKTextInput)?) -> VoiceRewriteFieldSnapshot? {
+        focusedField()
+    }
 }
 
 /// Captured after recording starts, before the host inserts its dictation result.
@@ -68,7 +74,7 @@ extension VoiceRewriteAccessibility {
     public static func capture(client: any IMKTextInput,
                                accessibility: (any VoiceRewriteAccessibility)? = nil) -> VoiceDictationAnchor? {
         let adapter = accessibility ?? VoiceSystemRewriteAccessibility.shared
-        guard adapter.isTrusted, let field = adapter.focusedField(), field.usable,
+        guard adapter.isTrusted, let field = adapter.focusedField(matching: client), field.usable,
               field.bundleID == client.bundleIdentifier() else { return nil }
         return VoiceDictationAnchor(before: field, accessibility: adapter)
     }
@@ -78,7 +84,7 @@ extension VoiceRewriteAccessibility {
         guard !committed.isEmpty, committed.count <= 2000 else { return nil }
         for attempt in 0..<9 {
             guard !Task.isCancelled, accessibility.isTrusted,
-                  let after = accessibility.focusedField(), after.usable,
+                  let after = accessibility.focusedField(matching: client), after.usable,
                   after.sameField(as: before), after.bundleID == client.bundleIdentifier() else { return nil }
             if after.value != before.value {
                 guard let range = Self.insertedRange(before: before, after: after.value, text: committed) else { return nil }
@@ -138,7 +144,7 @@ extension VoiceRewriteAccessibility {
         guard !IsSecureEventInputEnabled(), client.markedRange().location == NSNotFound else { return nil }
         let adapter = accessibility ?? origin?.accessibility ?? VoiceSystemRewriteAccessibility.shared
         self.accessibility = adapter
-        if adapter.isTrusted, let field = adapter.focusedField(), field.usable,
+        if adapter.isTrusted, let field = adapter.focusedField(matching: client), field.usable,
            field.bundleID == client.bundleIdentifier() {
             let range: NSRange
             if let selected = field.selection, selected.length > 0, validVoiceRange(selected, in: field.value) {
@@ -238,7 +244,7 @@ extension VoiceRewriteAccessibility {
         guard let field else { return .contextChanged }
         for attempt in 0..<9 {
             guard !Task.isCancelled, accessibility.isTrusted,
-                  let observed = accessibility.focusedField(), observed.usable,
+                  let observed = accessibility.focusedField(matching: client), observed.usable,
                   observed.sameField(as: field), observed.bundleID == client.bundleIdentifier() else { return .clientChanged }
             if observed.value == expected {
                 insertedText = replacement; verifiedAfter = observed
@@ -264,7 +270,7 @@ extension VoiceRewriteAccessibility {
 
     private func currentField(client: any IMKTextInput, expectedValue: String) -> VoiceRewriteFieldSnapshot? {
         guard !Task.isCancelled, accessibility.isTrusted, let field,
-              let current = accessibility.focusedField(), current.usable,
+              let current = accessibility.focusedField(matching: client), current.usable,
               current.sameField(as: field), current.bundleID == client.bundleIdentifier(),
               current.value == expectedValue else { return nil }
         return current
@@ -276,7 +282,7 @@ extension VoiceRewriteAccessibility {
         if !adapter.isTrusted {
             return "系统当前未授予正在运行的“艾么语音测试”辅助功能权限，请在系统设置核对授权后重新启动输入法"
         }
-        guard let current = adapter.focusedField() else { return "无法读取当前输入框，请重新聚焦后重试或手动选中文字" }
+        guard let current = adapter.focusedField(matching: client) else { return "无法读取当前输入框，请重新聚焦后重试或手动选中文字" }
         guard current.usable else { return "当前输入框不可编辑或受保护，未改写" }
         if let origin, !origin.matches(current) { return "输入框或原文已变化，请手动选中文字改写" }
         return origin == nil ? "没有已验证的最近听写内容，请先听写或手动选中文字" : "无法安全定位原文，请手动选中文字改写"
@@ -304,7 +310,7 @@ extension VoiceRewriteAccessibility {
             && (current.value as NSString).substring(with: range) == rendered
     }
     public func isCurrent(client: any IMKTextInput) -> Bool {
-        guard accessibility.isTrusted, let current = accessibility.focusedField(),
+        guard accessibility.isTrusted, let current = accessibility.focusedField(matching: client),
               current.bundleID == client.bundleIdentifier() else { return false }
         return matches(current)
     }
@@ -324,7 +330,7 @@ extension VoiceRewriteAccessibility {
               selection.insertedText == replacement, let after = selection.verifiedAfter,
               validVoiceRange(selection.range, in: field.value),
               selection.range.location >= range.location, NSMaxRange(selection.range) <= NSMaxRange(range),
-              accessibility.isTrusted, let current = accessibility.focusedField(), current.usable,
+              accessibility.isTrusted, let current = accessibility.focusedField(matching: client), current.usable,
               current.bundleID == client.bundleIdentifier(), current.sameField(as: field),
               current.value == after.value else { return nil }
         let relative = NSRange(location: selection.range.location - range.location, length: selection.range.length)
@@ -339,40 +345,10 @@ extension VoiceRewriteAccessibility {
     var isTrusted: Bool { AXIsProcessTrusted() }
 
     func focusedField() -> VoiceRewriteFieldSnapshot? {
-        guard isTrusted, !IsSecureEventInputEnabled(), let app = NSWorkspace.shared.frontmostApplication,
-              let bundle = app.bundleIdentifier else { return nil }
-        let system = AXUIElementCreateSystemWide()
-        AXUIElementSetMessagingTimeout(system, 0.15)
-        var focused = attribute(kAXFocusedUIElementAttribute, of: system)
-        if focused == nil {
-            // Type4Me activates enhanced AX when an Electron app has not yet
-            // exposed its focused control. This changes no TCC permission.
-            let application = AXUIElementCreateApplication(app.processIdentifier)
-            AXUIElementSetMessagingTimeout(application, 0.15)
-            if let window = attribute(kAXFocusedWindowAttribute, of: application),
-               CFGetTypeID(window) == AXUIElementGetTypeID() {
-                let element = window as! AXUIElement
-                AXUIElementSetMessagingTimeout(element, 0.15)
-                _ = AXUIElementSetAttributeValue(element, "AXEnhancedUserInterface" as CFString, kCFBooleanTrue)
-            }
-            focused = attribute(kAXFocusedUIElementAttribute, of: system)
-        }
-        guard let raw = focused, CFGetTypeID(raw) == AXUIElementGetTypeID() else { return nil }
-        let element = raw as! AXUIElement
-        AXUIElementSetMessagingTimeout(element, 0.15)
-        var pid: pid_t = 0
-        guard AXUIElementGetPid(element, &pid) == .success, pid == app.processIdentifier else { return nil }
-        let role = attribute(kAXRoleAttribute, of: element) as? String ?? ""
-        let subrole = attribute(kAXSubroleAttribute, of: element) as? String ?? ""
-        // Reject secure controls before reading their value.
-        guard ![role, subrole].contains(where: { $0.lowercased().contains("secure") || $0.lowercased().contains("password") }),
-              let value = attribute(kAXValueAttribute, of: element) as? String else { return nil }
-        let selectedText = settable(kAXSelectedTextAttribute, of: element)
-        let wholeValue = settable(kAXValueAttribute, of: element)
-        let editable = selectedText || wholeValue || settable(kAXSelectedTextRangeAttribute, of: element)
-        return VoiceRewriteFieldSnapshot(element: element, processID: pid, bundleID: bundle, value: value,
-            selection: selection(of: element), isEditable: editable, selectedTextSettable: selectedText,
-            valueSettable: wholeValue, singleLine: role == kAXTextFieldRole || role == "AXSearchField")
+        VoiceRewriteAXFieldReader.snapshot(client: nil)
+    }
+    func focusedField(matching client: (any IMKTextInput)?) -> VoiceRewriteFieldSnapshot? {
+        VoiceRewriteAXFieldReader.snapshot(client: client)
     }
     func select(_ range: NSRange, in field: VoiceRewriteFieldSnapshot) -> Bool {
         guard let element = verifiedElement(field), validVoiceRange(range, in: field.value) else { return false }
@@ -381,7 +357,7 @@ extension VoiceRewriteAccessibility {
         return AXUIElementSetAttributeValue(element, kAXSelectedTextRangeAttribute as CFString, value) == .success
     }
     func replaceSelectedText(_ text: String, in field: VoiceRewriteFieldSnapshot) -> Bool {
-        guard let element = verifiedElement(field), let current = focusedField(),
+        guard let element = verifiedElement(field), let current = anchoredField(field),
               current.selection == field.selection else { return false }
         return AXUIElementSetAttributeValue(element, kAXSelectedTextAttribute as CFString, text as CFString) == .success
     }
@@ -389,26 +365,13 @@ extension VoiceRewriteAccessibility {
         guard let element = verifiedElement(field) else { return false }
         return AXUIElementSetAttributeValue(element, kAXValueAttribute as CFString, text as CFString) == .success
     }
+    /// Re-read the app that owned the snapshot, not whichever app is frontmost now.
+    private func anchoredField(_ field: VoiceRewriteFieldSnapshot) -> VoiceRewriteFieldSnapshot? {
+        VoiceRewriteAXFieldReader.snapshot(bundleID: field.bundleID, processID: field.processID)
+    }
     private func verifiedElement(_ field: VoiceRewriteFieldSnapshot) -> AXUIElement? {
-        guard isTrusted, let current = focusedField(), current.usable, current.sameField(as: field),
+        guard isTrusted, let current = anchoredField(field), current.usable, current.sameField(as: field),
               current.value == field.value, CFGetTypeID(field.element) == AXUIElementGetTypeID() else { return nil }
         return (field.element as! AXUIElement)
-    }
-    private func attribute(_ name: String, of element: AXUIElement) -> CFTypeRef? {
-        var value: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(element, name as CFString, &value) == .success else { return nil }
-        return value
-    }
-    private func settable(_ name: String, of element: AXUIElement) -> Bool {
-        var settable = DarwinBoolean(false)
-        return AXUIElementIsAttributeSettable(element, name as CFString, &settable) == .success && settable.boolValue
-    }
-    private func selection(of element: AXUIElement) -> NSRange? {
-        guard let raw = attribute(kAXSelectedTextRangeAttribute, of: element), CFGetTypeID(raw) == AXValueGetTypeID() else { return nil }
-        let value = raw as! AXValue
-        var range = CFRange()
-        guard AXValueGetType(value) == .cfRange, AXValueGetValue(value, .cfRange, &range),
-              range.location >= 0, range.length >= 0, range.location <= Int.max - range.length else { return nil }
-        return NSRange(location: range.location, length: range.length)
     }
 }

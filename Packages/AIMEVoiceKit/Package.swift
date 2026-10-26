@@ -33,5 +33,6 @@ let package = Package(
         .target(name: "AIMEVoiceSettings", dependencies: ["AIMEVoice"],
                 resources: [.copy("Resources/VoiceConnectionTest.wav")], swiftSettings: strictSwift),
         .testTarget(name: "AIMEVoiceSettingsTests", dependencies: ["AIMEVoice", "AIMEVoiceSettings"], swiftSettings: strictSwift),
+        .testTarget(name: "AIMEVoiceRewriteTests", dependencies: ["AIMEVoiceHost"], swiftSettings: strictSwift),
     ]
 )

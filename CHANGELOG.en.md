@@ -12,6 +12,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Fixed
+
+- Voice rewrite immediately after dictation reported that the current text field could not be read, including ordinary text fields. It now reads the field the current app is typing into. Password fields and secure input are still left unchanged.
+
+### Known issues
+
+- Fields that do not expose their text to Accessibility (some terminals, canvases, and games) still cannot be rewritten. A window with several text fields and no focused one is not guessed.
+
 ## [0.1.10] - 2026-10-20
 
 > Stable release · Developer ID signed · notarized by Apple
