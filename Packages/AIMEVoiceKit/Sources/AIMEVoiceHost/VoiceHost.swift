@@ -18,7 +18,7 @@ public struct InputOwner: Hashable, Sendable {
 public enum KeyDisposition: Equatable, Sendable { case consumed, passThrough }
 public enum HostPresentation: Sendable { case status(String), hideCandidates, restorePanel }
 public enum VoiceFeedback: Sendable {
-    public enum State: Sendable { case preparing, recording, transcribing, processing, rewriting }
+    public enum State: Sendable, Equatable { case preparing, recording, transcribing, processing, rewriting, translating }
     case state(State), level(Float), cue(recording: Bool), hide
 }
 @MainActor public protocol VoiceHost: AnyObject {

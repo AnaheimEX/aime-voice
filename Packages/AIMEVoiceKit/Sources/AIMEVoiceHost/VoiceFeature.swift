@@ -18,6 +18,8 @@ public final class VoiceFeature {
     private let recentVoice = VoiceRecentDictation()
     private var voice: VoiceInputSession?
     private var voicePreparation: Task<Void, Never>?
+    /// Text-only translation. Never owns a recorder or recognition session.
+    private var translationTask: Task<Void, Never>?
     private var voiceKeyState = VoiceKeyState()
     private var activeOwner: InputOwner?
     private var shortcuts = VoiceShortcutConfiguration()
@@ -46,6 +48,7 @@ public final class VoiceFeature {
                 case .transcribing: overlay = .transcribing
                 case .processing: overlay = .processing
                 case .rewriting: overlay = .rewriting
+                case .translating: overlay = .translating
                 }
                 VoiceStatusOverlay.shared.show(state: overlay)
             }
@@ -101,7 +104,7 @@ public final class VoiceFeature {
         observers.removeAll()
     }
 
-    public var isIdle: Bool { voice == nil && voicePreparation == nil }
+    public var isIdle: Bool { voice == nil && voicePreparation == nil && translationTask == nil }
 
     private func reloadShortcuts() {
         shortcuts = (try? Data(contentsOf: settingsURL)).flatMap { try? JSONDecoder().decode(VoiceShortcutConfiguration.self, from: $0) } ?? VoiceShortcutConfiguration()
@@ -210,13 +213,20 @@ public final class VoiceFeature {
         let cancel = voice?.cancelShortcut ?? shortcuts.cancelShortcut
         let name = voiceKeyName(event)
         if name == shortcuts.rewriteShortcut, voice == nil, shortcuts.enabled {
-            if voicePreparation != nil { cancelVoice(); return true }
+            if voicePreparation != nil || translationTask != nil { cancelVoice(); return true }
             voiceKeyState.consumeDown(event.keyCode)
             if !event.isARepeat { startVoice(client: client, recordingKeyCode: event.keyCode, rewriting: true) }
             return true
         }
+        if name == shortcuts.translateShortcut, voice == nil, shortcuts.enabled,
+           Self.translateShortcutIsDistinct(shortcuts) {
+            if voicePreparation != nil || translationTask != nil { cancelVoice(); return true }
+            voiceKeyState.consumeDown(event.keyCode)
+            if !event.isARepeat { startTranslation(client: client) }
+            return true
+        }
         if name == toggle, voice != nil || shortcuts.enabled {
-            if voicePreparation != nil { cancelVoice() }
+            if voicePreparation != nil || translationTask != nil { cancelVoice() }
             voiceLatencyLogger.notice("Voice shortcut matched keyCode=\(event.keyCode, privacy: .public) flags=\(event.modifierFlags.rawValue, privacy: .public)")
             voiceKeyState.consumeDown(event.keyCode)
             if event.type == .keyDown, event.isARepeat { return true }
@@ -225,14 +235,15 @@ public final class VoiceFeature {
             } else { startVoice(client: client, recordingKeyCode: event.keyCode) }
             return true
         }
-        if voice != nil || voicePreparation != nil, name == cancel || name == "Escape" {
+        if voice != nil || voicePreparation != nil || translationTask != nil, name == cancel || name == "Escape" {
+            let translating = translationTask != nil && voice == nil
             voiceKeyState.consumeDown(event.keyCode)
             cancelVoice()
-            showStatus("语音任务已取消")
+            showStatus(translating ? "翻译已取消" : "语音任务已取消")
             return true
         }
         // Modifier transitions are not text edits. An ordinary key still invalidates pending dictation.
-        if event.type == .keyDown, voice != nil || voicePreparation != nil { cancelVoice() }
+        if event.type == .keyDown, voice != nil || voicePreparation != nil || translationTask != nil { cancelVoice() }
         return false
     }
 
@@ -355,10 +366,113 @@ public final class VoiceFeature {
         }
     }
 
+    private static func translateShortcutIsDistinct(_ shortcuts: VoiceShortcutConfiguration) -> Bool {
+        let name = shortcuts.translateShortcut
+        return name != shortcuts.toggleShortcut && name != shortcuts.cancelShortcut && name != shortcuts.rewriteShortcut
+            && name != "Control+Alt+p" && name != "Return" && name != "Escape"
+    }
+
+    /// Read the same span rewrite would edit, then replace it with a text-model translation.
+    private func startTranslation(client: (any IMKTextInput)?) {
+        let settings = loadSettings()
+        guard settings.enabled else { showStatus("语音未开启：设置 › 语音输入"); return }
+        guard !IsSecureEventInputEnabled() else { showStatus("安全输入状态下不能翻译"); return }
+        guard snapshot?.canStart == true else {
+            showStatus("请先确认当前输入，再开始翻译")
+            return
+        }
+        guard client != nil else { return }
+        feedback(.state(.translating))
+        translationTask = Task { @MainActor [weak self] in
+            // Let the assignment above publish before this body continues.
+            await Task.yield()
+            guard let self, !Task.isCancelled, self.translationTask != nil else { return }
+            let origin = await self.recentVoice.latest()
+            guard !Task.isCancelled, self.translationTask != nil, self.voice == nil else { return }
+            guard let current = self.snapshot?.client else {
+                self.finishTranslation(status: nil)
+                return
+            }
+            guard let selection = VoiceRewriteSelection(client: current, origin: origin) else {
+                self.finishTranslation(status: VoiceRewriteSelection.preparationFailureMessage(
+                    client: current, origin: origin, action: "翻译"))
+                return
+            }
+            let prepared = await selection.prepare(in: current)
+            guard !Task.isCancelled, self.translationTask != nil, self.voice == nil else { return }
+            guard prepared, self.snapshot?.canStart == true else {
+                self.finishTranslation(status: "无法确认翻译选区，原文未改动")
+                return
+            }
+            let tracked = origin.flatMap { $0.owns(selection, client: current) ? $0 : nil }
+            do {
+                let result = try await VoiceProcessor().translate(selection.text, settings: settings)
+                guard !Task.isCancelled, self.translationTask != nil, self.voice == nil else { return }
+                await self.commitTranslation(result.text, selection: selection, origin: tracked)
+            } catch is CancellationError {
+                return
+            } catch let error as URLError where error.code == .cancelled {
+                return
+            } catch {
+                guard !Task.isCancelled, self.translationTask != nil else { return }
+                self.finishTranslation(status: error.localizedDescription)
+            }
+        }
+    }
+
+    private func commitTranslation(_ text: String, selection: VoiceRewriteSelection, origin: VoiceDictationOrigin?) async {
+        guard !Task.isCancelled, translationTask != nil, !IsSecureEventInputEnabled(),
+              let snapshot, snapshot.canCommit else {
+            finishTranslation(status: "输入位置已变化，翻译结果未写入")
+            return
+        }
+        if selection.isSingleLine && (text.contains("\n") || text.contains("\r")) {
+            finishTranslation(status: "单行输入框不能写入换行，原文未改动")
+            return
+        }
+        let current = snapshot.client
+        present(.hideCandidates)
+        if await selection.insert(text, into: current) != nil {
+            guard translationTask != nil else { return }
+            translationTask = nil
+            feedback(.hide)
+            present(.restorePanel)
+            showStatus(selection.preparationFailureMessage ?? "输入位置已变化，翻译结果未写入")
+            return
+        }
+        guard !Task.isCancelled, translationTask != nil else { return }
+        let updated: VoiceDictationOrigin?
+        if let origin {
+            updated = origin.advanced(target: selection, replacement: text, client: current)
+        } else {
+            updated = selection.committedOrigin(sessionID: UUID(), transcript: "")
+        }
+        recentVoice.replace(updated)
+        translationTask = nil
+        feedback(.hide)
+        present(.restorePanel)
+    }
+
+    private func finishTranslation(status: String?) {
+        translationTask = nil
+        feedback(.hide)
+        if let status { showStatus(status) }
+        else { present(.restorePanel) }
+    }
+
     func cancelVoice(restorePanel: Bool = true) {
         voicePreparation?.cancel()
         voicePreparation = nil
-        guard let session = voice else { return }
+        let hadTranslation = translationTask != nil
+        translationTask?.cancel()
+        translationTask = nil
+        guard let session = voice else {
+            if hadTranslation {
+                feedback(.hide)
+                if restorePanel { present(.restorePanel) }
+            }
+            return
+        }
         session.task?.cancel()
         session.anchorTask?.cancel()
         session.bridge.cancel()

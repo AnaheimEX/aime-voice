@@ -6,6 +6,7 @@ public struct VoiceShortcutConfiguration: Codable, Sendable, Equatable {
     public var toggleShortcut = "Control+Alt+v"
     public var cancelShortcut = "Escape"
     public var rewriteShortcut = "Control+Alt+r"
+    public var translateShortcut = "Control+Alt+t"
 
     public init() {}
 
@@ -15,7 +16,9 @@ public struct VoiceShortcutConfiguration: Codable, Sendable, Equatable {
         return result
     }
 
-    private enum CodingKeys: String, CodingKey { case enabled, toggleShortcut, cancelShortcut, rewriteShortcut }
+    private enum CodingKeys: String, CodingKey {
+        case enabled, toggleShortcut, cancelShortcut, rewriteShortcut, translateShortcut
+    }
 
     public init(from decoder: any Decoder) throws {
         self.init()
@@ -24,12 +27,18 @@ public struct VoiceShortcutConfiguration: Codable, Sendable, Equatable {
         toggleShortcut = try container.decodeIfPresent(String.self, forKey: .toggleShortcut) ?? toggleShortcut
         cancelShortcut = try container.decodeIfPresent(String.self, forKey: .cancelShortcut) ?? cancelShortcut
         rewriteShortcut = try container.decodeIfPresent(String.self, forKey: .rewriteShortcut) ?? rewriteShortcut
+        translateShortcut = try container.decodeIfPresent(String.self, forKey: .translateShortcut) ?? translateShortcut
     }
 
-    public static func validate(toggle: String, cancel: String, rewrite: String = "Control+Alt+r") throws {
+    public static func validate(toggle: String, cancel: String, rewrite: String = "Control+Alt+r",
+                                translate: String = "Control+Alt+t") throws {
         guard isSupported(rewrite), rewrite != toggle, rewrite != cancel,
               rewrite != "Control+Alt+p", rewrite != "Return", rewrite != "Escape" else {
             throw InvalidShortcut(message: "改写快捷键不能与录音、取消、回车或 AI 助手冲突")
+        }
+        guard isSupported(translate), translate != toggle, translate != cancel, translate != rewrite,
+              translate != "Control+Alt+p", translate != "Return", translate != "Escape" else {
+            throw InvalidShortcut(message: "翻译快捷键不能与录音、取消、改写、回车或 AI 助手冲突")
         }
         guard !toggle.isEmpty, !cancel.isEmpty else { throw InvalidShortcut(message: "请设置开始/结束和取消快捷键") }
         guard toggle != cancel else { throw InvalidShortcut(message: "开始/结束与取消不能使用同一个快捷键") }

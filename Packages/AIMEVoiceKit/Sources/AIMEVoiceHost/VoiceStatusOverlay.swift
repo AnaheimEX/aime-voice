@@ -32,7 +32,7 @@ enum VoiceRecordingCue {
 @MainActor
 final class VoiceStatusOverlay {
     enum State {
-        case preparing, recording, transcribing, processing, rewriting
+        case preparing, recording, transcribing, processing, rewriting, translating
 
         var label: String {
             switch self {
@@ -41,6 +41,7 @@ final class VoiceStatusOverlay {
             case .transcribing: "正在转译"
             case .processing: "正在润色"
             case .rewriting: "正在改写"
+            case .translating: "翻译中…"
             }
         }
     }

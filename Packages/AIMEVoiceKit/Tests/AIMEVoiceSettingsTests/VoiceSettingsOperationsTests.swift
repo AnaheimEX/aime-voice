@@ -114,6 +114,112 @@ final class VoiceSettingsOperationsTests: XCTestCase {
         XCTAssertEqual(VoiceSettings.load(from: url), saved)
     }
 
+    func testTranslateSettingsRoundTripAndDoNotReplacePostRecognitionLanguage() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let url = root.appendingPathComponent("settings.json")
+        var settings = VoiceSettings()
+        settings.enabled = true
+        settings.mode = "translate"
+        settings.targetLanguage = "法文"
+        settings.translateShortcut = "Control+Alt+y"
+        settings.translateTargetLanguage = .japanese
+        settings.translatePromptJa = "只输出日文译文"
+        try settings.save(to: url)
+        let restored = VoiceSettings.load(from: url)
+        XCTAssertEqual(restored, settings)
+        XCTAssertEqual(restored.mode, "translate")
+        XCTAssertEqual(restored.targetLanguage, "法文")
+        XCTAssertEqual(restored.translateTargetLanguage, .japanese)
+        XCTAssertEqual(restored.effectiveTranslatePrompt, "只输出日文译文")
+        XCTAssertFalse(restored.effectiveTranslatePrompt.contains("法文"))
+        let shortcuts = try JSONDecoder().decode(VoiceShortcutConfiguration.self, from: Data(contentsOf: url))
+        XCTAssertEqual(shortcuts.translateShortcut, "Control+Alt+y")
+        XCTAssertEqual(shortcuts.rewriteShortcut, "Control+Alt+r")
+        let legacy = try JSONDecoder().decode(VoiceSettings.self, from: Data(#"{"mode":"translate","targetLanguage":"法文"}"#.utf8))
+        XCTAssertEqual(legacy.mode, "translate")
+        XCTAssertEqual(legacy.targetLanguage, "法文")
+        XCTAssertEqual(legacy.translateShortcut, "Control+Alt+t")
+        XCTAssertEqual(legacy.translateTargetLanguage, .english)
+        XCTAssertEqual(legacy.translatePromptEn, "")
+        XCTAssertEqual(legacy.translatePromptJa, "")
+        let unknown = try JSONDecoder().decode(VoiceSettings.self, from: Data(#"{"translateTargetLanguage":"fr"}"#.utf8))
+        XCTAssertEqual(unknown.translateTargetLanguage, .english)
+    }
+
+    func testTranslateShortcutRejectsCollisionsWithRecordRewriteAndAssistant() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let url = root.appendingPathComponent("settings.json")
+        var saved = VoiceSettings()
+        saved.translatePromptEn = "保留"
+        try saved.save(to: url)
+        let collisions = [
+            saved.toggleShortcut, saved.cancelShortcut, saved.rewriteShortcut,
+            "Control+Alt+p", "Return", "Escape", "not a shortcut",
+        ]
+        for shortcut in collisions {
+            var invalid = saved
+            invalid.translateShortcut = shortcut
+            XCTAssertThrowsError(try invalid.save(to: url)) { error in
+                XCTAssertTrue(error.localizedDescription.contains("翻译"))
+            }
+            XCTAssertEqual(VoiceSettings.load(from: url).translatePromptEn, "保留")
+            XCTAssertEqual(VoiceSettings.load(from: url).translateShortcut, "Control+Alt+t")
+        }
+        var rewrite = saved
+        rewrite.rewriteShortcut = "Control+Alt+t"
+        XCTAssertThrowsError(try rewrite.save(to: url))
+        XCTAssertEqual(VoiceSettings.load(from: url).rewriteShortcut, "Control+Alt+r")
+    }
+
+    func testTranslatePromptFollowsTheSelectedLanguageAndKeepsTheOtherCustomPrompt() {
+        var settings = VoiceSettings()
+        XCTAssertEqual(settings.effectiveTranslatePrompt, VoiceTranslate.englishInstructions)
+        XCTAssertTrue(settings.effectiveTranslatePrompt.contains("英文"))
+        XCTAssertFalse(settings.effectiveTranslatePrompt.contains("日文"))
+        settings.translateTargetLanguage = .japanese
+        XCTAssertEqual(settings.effectiveTranslatePrompt, VoiceTranslate.japaneseInstructions)
+        XCTAssertTrue(settings.effectiveTranslatePrompt.contains("日文"))
+        XCTAssertFalse(settings.effectiveTranslatePrompt.contains("英文"))
+        settings.setTranslatePrompt("  \n", for: .japanese)
+        XCTAssertEqual(settings.translatePromptJa, "")
+        XCTAssertEqual(settings.effectiveTranslatePrompt, VoiceTranslate.japaneseInstructions)
+        settings.setTranslatePrompt(VoiceTranslate.englishInstructions, for: .english)
+        XCTAssertEqual(settings.translatePromptEn, "")
+        settings.setTranslatePrompt("译成英文，只输出译文", for: .english)
+        settings.setTranslatePrompt("訳して。訳文だけ。", for: .japanese)
+        settings.translateTargetLanguage = .english
+        let english = VoiceTranslate.completionRequest(text: "你好，ChatGPT", settings: settings)
+        XCTAssertEqual(english.instructions, "译成英文，只输出译文")
+        XCTAssertEqual(english.text, "你好，ChatGPT")
+        settings.translateTargetLanguage = .japanese
+        let japanese = VoiceTranslate.completionRequest(text: "你好，ChatGPT", settings: settings)
+        XCTAssertEqual(japanese.instructions, "訳して。訳文だけ。")
+        XCTAssertEqual(japanese.text, "你好，ChatGPT")
+        XCTAssertNotEqual(english.instructions, japanese.instructions)
+        settings.targetLanguage = "法文"
+        settings.mode = "translate"
+        XCTAssertEqual(settings.effectiveTranslatePrompt, "訳して。訳文だけ。")
+        XCTAssertEqual(settings.translatePromptEn, "译成英文，只输出译文")
+    }
+
+    func testFieldTranslateFailsBeforeNetworkWhenTheTextModelIsMissing() async {
+        var settings = VoiceSettings()
+        settings.mode = "translate"
+        settings.targetLanguage = "法文"
+        settings.translateTargetLanguage = .english
+        settings.translatePromptEn = "EN_PROMPT_SENTINEL"
+        settings.decisionMode = "accelerate"
+        settings.decision = VoiceEndpoint(baseURL: "http://127.0.0.1:9/v1", model: "forbidden-decision", apiKey: "test")
+        do {
+            _ = try await VoiceProcessor().translate("你好", settings: settings)
+            XCTFail("missing text model must fail before a request")
+        } catch {
+            XCTAssertTrue(error.localizedDescription.contains("润色模型"))
+        }
+    }
+
     func testMissingOrMalformedFileLoadsDefaultsAtExplicitPath() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }
