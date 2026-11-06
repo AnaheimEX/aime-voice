@@ -1,0 +1,68 @@
+[
+  {
+    "target": "把海报发给我",
+    "instruction": "把海报发我",
+    "expected": "把海报发我",
+    "expectLocal": true
+  },
+  {
+    "target": "把海报发给我",
+    "instruction": "把海报发我吧。",
+    "expected": "把海报发我",
+    "expectLocal": true
+  },
+  {
+    "target": "明天下午三点开会，把海报发给我",
+    "instruction": "把海报发我",
+    "expected": "明天下午三点开会，把海报发我",
+    "expectLocal": true
+  },
+  {
+    "target": "把海报发给我。",
+    "instruction": "把海报发我",
+    "expected": "把海报发我。",
+    "expectLocal": true
+  },
+  {
+    "target": "我们明天去公园玩，然后吃饭",
+    "instruction": "我们明天去商场玩",
+    "expected": "我们明天去商场玩，然后吃饭",
+    "expectLocal": false
+  },
+  {
+    "target": "我们去公园玩耍",
+    "instruction": "我们去公园玩乐",
+    "expected": "我们去公园玩乐",
+    "expectLocal": false
+  },
+  {
+    "target": "我想去公园",
+    "instruction": "我不想去公园",
+    "expected": "我不想去公园",
+    "expectLocal": false
+  },
+  {
+    "target": "明天下午三点开会",
+    "instruction": "明天下午四点开会",
+    "expected": "明天下午四点开会",
+    "expectLocal": false
+  },
+  {
+    "target": "把海报发给我，把海报发给我",
+    "instruction": "把海报发我",
+    "expected": null,
+    "expectLocal": false
+  },
+  {
+    "target": "今天天气很好适合出门",
+    "instruction": "请帮我订一张机票",
+    "expected": null,
+    "expectLocal": false
+  },
+  {
+    "target": "我们明天去大公园玩，然后吃饭",
+    "instruction": "我们明天去公园玩",
+    "expected": "我们明天去公园玩，然后吃饭",
+    "expectLocal": true
+  }
+]
