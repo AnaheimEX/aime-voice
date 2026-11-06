@@ -116,8 +116,31 @@ public struct VoiceSettings: Codable, Sendable, Equatable {
             : min(2000, max(100, decisionBudgetMilliseconds))
     }
     public var decision = VoiceEndpoint()
+    /// Target language for the selection hotkey; independent of post-ASR `mode`.
+    public var translateTargetLanguage = VoiceTranslateLanguage.english
+    /// Editable translation instructions, keyed by `VoiceTranslateLanguage.rawValue`.
+    /// Absent means "use the built-in instructions for that language".
+    public var translatePrompts: [String: String] = [:]
     /// Voice-only content; persisted here, independently of AIMECore's Rime workspace.
     public var vocabulary = VoiceVocabulary()
+
+    /// Saved override for one language, or empty when the built-in text applies.
+    public func savedTranslatePrompt(for language: VoiceTranslateLanguage) -> String {
+        translatePrompts[language.rawValue] ?? ""
+    }
+
+    /// An empty prompt removes the override instead of storing a blank one.
+    public mutating func setTranslatePrompt(_ prompt: String, for language: VoiceTranslateLanguage) {
+        let trimmed = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        translatePrompts[language.rawValue] = trimmed.isEmpty ? nil : prompt
+    }
+
+    /// The exact instruction text a translation request sends.
+    public var effectiveTranslatePrompt: String {
+        let saved = savedTranslatePrompt(for: translateTargetLanguage)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return saved.isEmpty ? VoiceTranslate.instructions(for: translateTargetLanguage) : saved
+    }
 
     public init() {}
 
@@ -187,6 +210,7 @@ public struct VoiceSettings: Codable, Sendable, Equatable {
         case decisionMode, decisionProtocol, decisionBudgetMilliseconds, decision
         case vocabulary, polishStyle, localSpeechModel, speechBackend, interfazeAPIKey
         case asrProfiles, llmProfiles, decisionProfiles
+        case translateTargetLanguage, translatePrompts
     }
 
     public init(from decoder: any Decoder) throws {
@@ -218,5 +242,8 @@ public struct VoiceSettings: Codable, Sendable, Equatable {
         decisionBudgetMilliseconds = try container.decodeIfPresent(Int.self, forKey: .decisionBudgetMilliseconds) ?? decisionBudgetMilliseconds
         decision = try container.decodeIfPresent(VoiceEndpoint.self, forKey: .decision) ?? decision
         vocabulary = try container.decodeIfPresent(VoiceVocabulary.self, forKey: .vocabulary) ?? vocabulary
+        translateTargetLanguage = (try? container.decodeIfPresent(VoiceTranslateLanguage.self,
+                                                                 forKey: .translateTargetLanguage)) ?? translateTargetLanguage
+        translatePrompts = try container.decodeIfPresent([String: String].self, forKey: .translatePrompts) ?? translatePrompts
     }
 }

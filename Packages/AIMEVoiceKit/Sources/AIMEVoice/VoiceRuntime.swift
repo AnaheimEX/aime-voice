@@ -3,7 +3,7 @@ import OSLog
 
 // External I/O seams for inert runtime checks. Host callers use only VoiceRuntime.
 @MainActor
-protocol VoiceRuntimeCapture: AnyObject {
+public protocol VoiceRuntimeCapture: AnyObject {
     var lastStartWasPrewarmed: Bool { get }
     func warmUpIfAuthorized() async -> Bool
     func start(onLevel: @escaping @Sendable (Double) -> Void,
@@ -14,7 +14,7 @@ protocol VoiceRuntimeCapture: AnyObject {
 }
 
 @MainActor
-protocol VoiceRuntimeRecognition: AnyObject {
+public protocol VoiceRuntimeRecognition: AnyObject {
     var timing: VoiceRecognitionTiming { get }
     var receivePCM: @Sendable (Data) -> Void { get }
     func prepare() async throws
@@ -29,9 +29,10 @@ extension VoiceRuntimeRecognition {
     func hypothesis() -> String { "" }
 }
 
+public extension VoiceRecorder { }
 extension VoiceRecorder: VoiceRuntimeCapture {}
 extension VoiceRecognitionSession: VoiceRuntimeRecognition {
-    var receivePCM: @Sendable (Data) -> Void { { [self] pcm in append(pcm) } }
+    public var receivePCM: @Sendable (Data) -> Void { { [self] pcm in append(pcm) } }
 }
 
 /// One runtime per XPC connection, one capture owner across the process.
@@ -78,7 +79,7 @@ public final class VoiceRuntime {
         }, now: { .now }, emit: emit)
     }
 
-    init(capture: any VoiceRuntimeCapture,
+    public init(capture: any VoiceRuntimeCapture,
          makeRecognition: @escaping (VoiceSettings, @escaping @Sendable (String) -> Void) -> any VoiceRuntimeRecognition,
          process: @escaping (VoiceRequest, String) async throws -> VoiceProcessingResult,
          now: @escaping () -> ContinuousClock.Instant,
@@ -92,6 +93,7 @@ public final class VoiceRuntime {
 
     public func warmUp() async -> Bool {
         guard !closed, request == nil, Self.captureOwner == nil else { return false }
+        guard !SecureEventInputShield.isSecureEventInput() else { return false }
         let generation = self.generation
         let warmed = await recorder.warmUpIfAuthorized()
         return warmed && !closed && request == nil && self.generation == generation && Self.captureOwner == nil
@@ -100,6 +102,14 @@ public final class VoiceRuntime {
     public func start(_ request: VoiceRequest) throws {
         guard !closed else { throw Failure.closed }
         guard self.request == nil, Self.captureOwner == nil else { throw Failure.busy }
+        // A secure-input session (password field, lock screen) must never open the
+        // microphone. Refuse before anything is owned or prepared.
+        guard !SecureEventInputShield.isSecureEventInput() else {
+            self.request = nil
+            Self.captureOwner = nil
+            emit("error", text: "安全输入状态下不能录音")
+            return
+        }
         let generation = self.generation
         let receivedAt = now()
         self.request = request
@@ -147,8 +157,18 @@ public final class VoiceRuntime {
                 self.processPendingAudio()
             } catch {
                 guard self.isCurrent(generation) else { return }
-                self.emit("error", text: error.localizedDescription)
+                self.emit("error", text: Self.message(for: error))
             }
+        }
+    }
+
+    /// A silent clip is a normal outcome, not a transport failure: say what the
+    /// user should do instead of surfacing the recorder's internal wording.
+    private static func message(for error: any Error) -> String {
+        guard let capture = error as? VoiceCaptureError else { return error.localizedDescription }
+        switch capture {
+        case .noSpeech: return "没有检测到语音，未发起识别"
+        default: return capture.localizedDescription
         }
     }
 

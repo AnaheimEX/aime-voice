@@ -9,6 +9,17 @@ public struct VoiceRecognitionTiming: Sendable {
     public let totalMilliseconds: Int?
     public let appleRecognizerReused: Bool?
 
+    public init(prepareMilliseconds: Int? = nil, firstTextMilliseconds: Int? = nil,
+                drainMilliseconds: Int? = nil, finalizeMilliseconds: Int? = nil,
+                totalMilliseconds: Int? = nil, appleRecognizerReused: Bool? = nil) {
+        self.prepareMilliseconds = prepareMilliseconds
+        self.firstTextMilliseconds = firstTextMilliseconds
+        self.drainMilliseconds = drainMilliseconds
+        self.finalizeMilliseconds = finalizeMilliseconds
+        self.totalMilliseconds = totalMilliseconds
+        self.appleRecognizerReused = appleRecognizerReused
+    }
+
     public var logFields: String {
         func value(_ number: Int?) -> String { number.map(String.init) ?? "pending" }
         return "prepareMs=\(value(prepareMilliseconds)) firstTextMs=\(value(firstTextMilliseconds)) drainMs=\(value(drainMilliseconds)) finalMs=\(value(finalizeMilliseconds)) recognitionTotalMs=\(value(totalMilliseconds)) appleRecognizerReused=\(appleRecognizerReused.map(String.init) ?? "na")"

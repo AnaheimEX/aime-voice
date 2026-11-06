@@ -17,6 +17,10 @@ public struct RecordedAudio: Sendable {
 
 public enum VoiceCaptureError: LocalizedError, Sendable {
     case permissionDenied, alreadyRecording, unavailable, notRecording, conversionFailed, tooLong
+    /// A secure-input session (password field, lock screen) must never open the mic.
+    case secureInput
+    /// The recording contained no speech above the silence floor.
+    case noSpeech
 
     public var errorDescription: String? {
         switch self {
@@ -26,13 +30,16 @@ public enum VoiceCaptureError: LocalizedError, Sendable {
         case .notRecording: "当前没有录音"
         case .conversionFailed: "无法转换麦克风音频"
         case .tooLong: "单次录音不能超过 5 分钟"
+        case .secureInput: "安全输入状态下不能录音"
+        case .noSpeech: "没有听清，请再说一遍"
         }
     }
 }
 
 // The facade owns cancellation generations; capture hardware and conversion never
 // run on MainActor. The transport seam lets lifecycle tests avoid the microphone.
-protocol VoiceCaptureTransport: AnyObject, Sendable {
+/// Seam for lifecycle tests: no microphone, no permission prompt.
+public protocol VoiceCaptureTransport: AnyObject, Sendable {
     func start(onLevel: @escaping @Sendable (Double) -> Void,
                onPCM: @escaping @Sendable (Data) -> Void,
                onFailure: @escaping @Sendable (VoiceCaptureError) -> Void) async throws
@@ -61,10 +68,10 @@ public final class VoiceRecorder {
         prewarm = { await FluidVoiceCapture.warmUp() }
     }
 
-    init(makeCapture: @escaping () -> any VoiceCaptureTransport,
-         permission: @escaping () async -> Bool,
-         isAuthorized: @escaping () -> Bool,
-         prewarm: @escaping @Sendable () async -> Void) {
+    public init(makeCapture: @escaping () -> any VoiceCaptureTransport,
+                permission: @escaping () async -> Bool,
+                isAuthorized: @escaping () -> Bool,
+                prewarm: @escaping @Sendable () async -> Void) {
         self.makeCapture = makeCapture
         self.permission = permission
         self.isAuthorized = isAuthorized
@@ -143,7 +150,13 @@ public final class VoiceRecorder {
         let pcm = try await transport.stop()
         try Task.checkCancellation()
         guard generation == id else { throw CancellationError() }
-        return RecordedAudio(wav: Self.makeWAV(pcm), duration: Double(pcm.count) / 32_000)
+        // Quiet speech is the most common reason a short utterance comes back
+        // empty: the transcriber receives "好的" at -35 dBFS. Boost toward the
+        // target before measuring silence — gain never attenuates and never clips.
+        let gained = AudioGain.normalised(pcm)
+        // A silent clip never reaches the model: ASR would hallucinate a tail.
+        guard !AudioGain.isSilent(gained) else { throw VoiceCaptureError.noSpeech }
+        return RecordedAudio(wav: Self.makeWAV(gained), duration: Double(gained.count) / 32_000)
     }
 
     public func cancel() {

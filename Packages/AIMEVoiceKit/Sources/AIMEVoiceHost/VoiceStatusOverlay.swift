@@ -37,7 +37,9 @@ final class VoiceStatusOverlay {
         var label: String {
             switch self {
             case .preparing: "正在准备录音"
-            case .recording: "正在录音"
+            // The recording label names what the user is waiting for, and is four
+            // characters like "正在润色" so both sit in the same trailing slot.
+            case .recording: "正在识别"
             case .transcribing: "正在转译"
             case .processing: "正在润色"
             case .rewriting: "正在改写"
@@ -142,38 +144,27 @@ private struct VoiceOverlayContent: View {
     let model: VoiceOverlayModel
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
-    // Apple's Siri SAE artwork: gradient tile with a white ring and waveform.
-    // Load the installed asset through public AppKit; do not execute framework code.
-    private static let siriIcon: NSImage? = Bundle(
-        path: "/System/Library/PrivateFrameworks/SiriUI.framework"
-    )?.image(forResource: "SiriIconSAE")
-
     var body: some View {
+        // Two fixed edges, one flexible middle. The label is anchored to the trailing
+        // edge, so every four-character state ("正在识别", "正在润色", "正在转译",
+        // "正在改写") starts at the same x; removing the Siri tile let the waveform
+        // grow into the space it used to occupy on the left.
         HStack(spacing: 8) {
-            if let image = Self.siriIcon {
-                Image(nsImage: image)
-                    .resizable()
-                    .interpolation(.high)
-                    .scaledToFit()
-                    .frame(width: 32, height: 32)
-                    .accessibilityHidden(true)
+            if model.state == .recording {
+                VoiceCompactAudioIndicator(model: model)
+                    .id(model.sessionID)
+                    .frame(maxWidth: .infinity)
+            } else {
+                // A spinner alone on the left rail would leave a wide empty gap, so
+                // the non-recording states keep the indicator next to their label.
+                Spacer(minLength: 0)
+                ProgressView().controlSize(.small).frame(width: 14, height: 14)
             }
-            Group {
-                if model.state == .recording {
-                    VoiceCompactAudioIndicator(model: model)
-                        .id(model.sessionID)
-                } else {
-                    HStack(spacing: 7) {
-                        ProgressView().controlSize(.small).frame(width: 14, height: 14)
-                        Text(model.state.label)
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(.white)
-                            .lineLimit(1)
-                        .fixedSize(horizontal: true, vertical: false)
-                    }
-                }
-            }
-            .frame(maxWidth: .infinity)
+            Text(model.state.label)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(.white)
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
         }
         .padding(.horizontal, 12)
         .frame(width: 180, height: 44)

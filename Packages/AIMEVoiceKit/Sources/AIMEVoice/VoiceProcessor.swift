@@ -10,6 +10,16 @@ public struct VoiceProcessingResult: Codable, Sendable {
     public let decisionAdopted: Bool
     public let elapsedMilliseconds: Int
     public var finalCorrections: Int = 0
+
+    public init(text: String, route: String, decisionInvoked: Bool, decisionAdopted: Bool,
+                elapsedMilliseconds: Int, finalCorrections: Int = 0) {
+        self.text = text
+        self.route = route
+        self.decisionInvoked = decisionInvoked
+        self.decisionAdopted = decisionAdopted
+        self.elapsedMilliseconds = elapsedMilliseconds
+        self.finalCorrections = finalCorrections
+    }
 }
 
 public struct VoiceDecisionTestResult: Sendable {
@@ -92,6 +102,9 @@ public struct VoiceProcessor: Sendable {
         let started = ContinuousClock.now
         let trimmed = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { throw VoiceHTTP.Failure.empty }
+        // ASR invents words for noise and returns "嗯。"/"Thank you." for silence.
+        // Rejecting here costs nothing; polishing it would send junk to the model.
+        guard !NonsenseDetector.isNonsense(trimmed) else { throw ProcessingFailure.nonsenseTranscript }
         // One replacement pass before any model. A later pass would let rules cascade twice.
         let correctionStarted = ContinuousClock.now
         if settings.mode == "polish", let term = settings.vocabulary.directTerm(matching: trimmed) {
@@ -122,6 +135,8 @@ public struct VoiceProcessor: Sendable {
 
     enum ProcessingFailure: LocalizedError {
         case missingModel, missingDecisionModel, missingPrompt, unsupportedContext, invalidDecision, rewriteTooLong, thinkingNotDisabled
+        /// The transcript was empty, punctuation only, or filler ("嗯", "uh").
+        case nonsenseTranscript
         var errorDescription: String? {
             switch self {
             case .thinkingNotDisabled: "服务未关闭思考模式，结果未上屏；请换用支持非思考模式的模型"
@@ -131,6 +146,7 @@ public struct VoiceProcessor: Sendable {
             case .missingPrompt: "自定义模式需要填写提示词"
             case .unsupportedContext: "此语音模式仅支持 {text}，不支持 {selected} 或 {clipboard} 上下文"
             case .invalidDecision: "决策接口未返回有效的四路决策结果或概率，无法验证 JEV 决策契约"
+            case .nonsenseTranscript: "没听清，请再说一遍"
             }
         }
     }

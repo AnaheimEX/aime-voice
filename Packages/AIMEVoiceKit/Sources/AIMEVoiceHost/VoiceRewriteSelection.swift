@@ -135,7 +135,7 @@ extension VoiceRewriteAccessibility {
 
     public init?(client: any IMKTextInput, origin: VoiceDictationOrigin? = nil,
                  accessibility: (any VoiceRewriteAccessibility)? = nil) {
-        guard !IsSecureEventInputEnabled(), client.markedRange().location == NSNotFound else { return nil }
+        guard !SecureEventInputShield.isSecureEventInput(), client.markedRange().location == NSNotFound else { return nil }
         let adapter = accessibility ?? origin?.accessibility ?? VoiceSystemRewriteAccessibility.shared
         self.accessibility = adapter
         if adapter.isTrusted, let field = adapter.focusedField(), field.usable,
@@ -339,7 +339,7 @@ extension VoiceRewriteAccessibility {
     var isTrusted: Bool { AXIsProcessTrusted() }
 
     func focusedField() -> VoiceRewriteFieldSnapshot? {
-        guard isTrusted, !IsSecureEventInputEnabled(), let app = NSWorkspace.shared.frontmostApplication,
+        guard isTrusted, !SecureEventInputShield.isSecureEventInput(), let app = NSWorkspace.shared.frontmostApplication,
               let bundle = app.bundleIdentifier else { return nil }
         let system = AXUIElementCreateSystemWide()
         AXUIElementSetMessagingTimeout(system, 0.15)
@@ -378,16 +378,30 @@ extension VoiceRewriteAccessibility {
         guard let element = verifiedElement(field), validVoiceRange(range, in: field.value) else { return false }
         var range = CFRange(location: range.location, length: range.length)
         guard let value = AXValueCreate(.cfRange, &range) else { return false }
-        return AXUIElementSetAttributeValue(element, kAXSelectedTextRangeAttribute as CFString, value) == .success
+        // AXUIElementSetAttributeValue raises NSException for some clients and
+        // Swift cannot catch that: one bad app would abort the input method.
+        var outcome = AXError.failure
+        ObjCException.guardCall("setSelectedTextRange") {
+            outcome = AXUIElementSetAttributeValue(element, kAXSelectedTextRangeAttribute as CFString, value)
+        }
+        return outcome == .success
     }
     func replaceSelectedText(_ text: String, in field: VoiceRewriteFieldSnapshot) -> Bool {
         guard let element = verifiedElement(field), let current = focusedField(),
               current.selection == field.selection else { return false }
-        return AXUIElementSetAttributeValue(element, kAXSelectedTextAttribute as CFString, text as CFString) == .success
+        var outcome = AXError.failure
+        ObjCException.guardCall("setSelectedText") {
+            outcome = AXUIElementSetAttributeValue(element, kAXSelectedTextAttribute as CFString, text as CFString)
+        }
+        return outcome == .success
     }
     func replaceValue(_ text: String, in field: VoiceRewriteFieldSnapshot) -> Bool {
         guard let element = verifiedElement(field) else { return false }
-        return AXUIElementSetAttributeValue(element, kAXValueAttribute as CFString, text as CFString) == .success
+        var outcome = AXError.failure
+        ObjCException.guardCall("setValue") {
+            outcome = AXUIElementSetAttributeValue(element, kAXValueAttribute as CFString, text as CFString)
+        }
+        return outcome == .success
     }
     private func verifiedElement(_ field: VoiceRewriteFieldSnapshot) -> AXUIElement? {
         guard isTrusted, let current = focusedField(), current.usable, current.sameField(as: field),

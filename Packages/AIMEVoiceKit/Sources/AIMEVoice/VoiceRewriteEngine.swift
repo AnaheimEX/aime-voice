@@ -25,6 +25,24 @@ public enum VoiceRewriteEngine {
         RevisePromptBuilder.buildUserPrompt(request: request)
     }
 
+    /// How a rewrite was resolved without a model. Kept separate from the text so
+    /// callers can log which path ran.
+    public enum Resolution: Equatable, Sendable {
+        /// An explicit replacement ("把 A 改成 B") applied locally.
+        case explicit(String)
+        /// The instruction was itself the wanted text, so the model is skipped.
+        case restatement(String)
+    }
+
+    /// Deterministic paths in priority order: an explicit replacement first, then a
+    /// restatement. Nil means the model is required. An explicit rejection throws
+    /// before the restatement pass, so a rejected edit never becomes a restatement.
+    public static func localResolution(for request: ReviseRequest) throws -> Resolution? {
+        if let explicit = try localCandidate(for: request) { return .explicit(explicit) }
+        if let restated = VoiceRewriteRestatement.candidate(for: request) { return .restatement(restated) }
+        return nil
+    }
+
     /// Return a validated deterministic replacement, or nil when a model is needed.
     /// A rejected local candidate must propagate its error rather than trigger a model retry.
     public static func localCandidate(for request: ReviseRequest) throws -> String? {
