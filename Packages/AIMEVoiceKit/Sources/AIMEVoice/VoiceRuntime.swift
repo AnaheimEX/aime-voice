@@ -105,9 +105,12 @@ public final class VoiceRuntime {
         // A secure-input session (password field, lock screen) must never open the
         // microphone. Refuse before anything is owned or prepared.
         guard !SecureEventInputShield.isSecureEventInput() else {
-            self.request = nil
-            Self.captureOwner = nil
+            // emit() reads sessionID from the request and treats "error" as a
+            // terminal event, so it must run before the request is released.
+            self.request = request
+            Self.captureOwner = self
             emit("error", text: "安全输入状态下不能录音")
+            Self.captureOwner = nil
             return
         }
         let generation = self.generation
@@ -208,7 +211,7 @@ public final class VoiceRuntime {
                 processPendingAudio()
             } catch {
                 guard !Task.isCancelled, self.isCurrent(generation) else { return }
-                emit("error", text: error.localizedDescription)
+                emit("error", text: Self.message(for: error))
             }
         }
     }
