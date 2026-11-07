@@ -9,7 +9,7 @@ public enum NonsenseDetector {
     /// Words that a model may emit for noise alone.
     public static let fillerWords: Set<String> = [
         "嗯", "啊", "呃", "哦", "哎", "那个", "就是", "这个",
-        "um", "uh", "er", "erm", "hmm", "mm",
+        "um", "uh", "er", "erm", "hmm", "mm", "m",
     ]
 
     public static func isNonsense(_ text: String) -> Bool {
@@ -20,7 +20,8 @@ public enum NonsenseDetector {
             in: CharacterSet.punctuationCharacters.union(.whitespacesAndNewlines)
         )
         if stripped.isEmpty { return true }
-        if stripped.count <= 1 { return true }
+        // A single character is still dictation in Chinese ("你", "了", "点"),
+        // so there is no length floor; noise words are caught by the filler list.
         if fillerWords.contains(stripped.lowercased()) { return true }
         return false
     }

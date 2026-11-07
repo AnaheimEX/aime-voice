@@ -25,7 +25,11 @@ final class NonsenseDetectorTests: XCTestCase {
     }
 
     func testShortFragments() {
-        // one character, or a single sample, is never a sentence
+        // A single character is still dictation in Chinese; filler noise is
+        // rejected by the word list, not by a length floor.
+        for word in ["你", "了", "点"] {
+            XCTAssertFalse(NonsenseDetector.isNonsense(word))
+        }
         for word in ["m", "啊", "嗯"] {
             XCTAssert(NonsenseDetector.isNonsense(word))
         }

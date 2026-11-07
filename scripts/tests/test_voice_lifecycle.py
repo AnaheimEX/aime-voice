@@ -45,12 +45,14 @@ def voice_dependency_flags(*, imports_only=False):
         cwd=ROOT, text=True).strip())
     flags = ["-I", str(output / "Modules")]
     description = json.loads((output / "description.json").read_text())
-    voice = next(command for command in description["swiftCommands"].values()
-                 if command.get("moduleName") == "AIMEVoice")
+    targets = [command for command in description["swiftCommands"].values()
+                if command.get("moduleName") in {"AIMEVoice", "AIMEVoiceHost"}]
     # Include source-provided C module maps as well as generated build products.
-    for argument in voice["otherArguments"]:
-        if argument.startswith("-fmodule-map-file="):
-            flags += ["-Xcc", argument]
+    # AIMEVoiceHost adds ObjCExceptionCatcher, which AIMEVoice's own flags omit.
+    for command in targets:
+        for argument in command["otherArguments"]:
+            if argument.startswith("-fmodule-map-file=") and ["-Xcc", argument] not in flags:
+                flags += ["-Xcc", argument]
     imports = list(flags)
     for directory in sorted(output.glob("*.build")):
         if directory.name not in {"AIMEVoice.build", "AIMEVoiceHost.build", "AIMEVoiceSettings.build"}:
