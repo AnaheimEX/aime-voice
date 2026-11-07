@@ -41,7 +41,7 @@ let package = Package(
         // and the focus-diagnosis reasons (FakeRewriteAccessibilityTests). Excluded so
         // the rest of the suite runs; drop the excludes when those are restored.
         .testTarget(name: "AIMEVoiceRewriteTests", dependencies: ["AIMEVoice", "AIMEVoiceHost"],
-                exclude: ["VoiceRewriteRestoreTests.swift", "FakeRewriteAccessibilityTests.swift"], swiftSettings: strictSwift),
+                swiftSettings: strictSwift),
         .testTarget(name: "AIMEVoiceTests", dependencies: ["AIMEVoice", "AIMEVoiceHost"], swiftSettings: strictSwift),
     ]
 )

@@ -38,14 +38,21 @@ public enum VoiceRewriteEngine {
     /// restatement. Nil means the model is required. An explicit rejection throws
     /// before the restatement pass, so a rejected edit never becomes a restatement.
     public static func localResolution(for request: ReviseRequest) throws -> Resolution? {
-        if let explicit = try localCandidate(for: request) { return .explicit(explicit) }
+        if let explicit = try explicitCandidate(for: request) { return .explicit(explicit) }
         if let restated = VoiceRewriteRestatement.candidate(for: request) { return .restatement(restated) }
         return nil
     }
 
     /// Return a validated deterministic replacement, or nil when a model is needed.
-    /// A rejected local candidate must propagate its error rather than trigger a model retry.
+    /// Explicit replacements come first; a restatement (the instruction is itself the wanted text)
+    /// resolves locally too. A rejected local candidate must propagate its error rather than
+    /// trigger a model retry, so the restatement pass only runs when the explicit path finds nothing.
     public static func localCandidate(for request: ReviseRequest) throws -> String? {
+        if let explicit = try explicitCandidate(for: request) { return explicit }
+        return VoiceRewriteRestatement.candidate(for: request)
+    }
+
+    private static func explicitCandidate(for request: ReviseRequest) throws -> String? {
         let analysis = ReviseInstructionAnalyzer.analyze(request.instruction, targetText: request.targetText)
         let authorizationDecision = ReviseAuthorizationResolver.resolve(
             target: request.targetText,

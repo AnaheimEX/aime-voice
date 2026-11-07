@@ -46,6 +46,9 @@ private func validVoiceRange(_ range: NSRange, in text: String) -> Bool {
 @MainActor public protocol VoiceRewriteAccessibility: AnyObject {
     var isTrusted: Bool { get }
     func focusedField() -> VoiceRewriteFieldSnapshot?
+    /// The field that should receive `client`'s text, or nil when no focused field belongs to it.
+    /// Refine this to make diagnosis distinguish "no field at all" from "field belongs to another app".
+    func focusedField(matching client: (any IMKTextInput)?) -> VoiceRewriteFieldSnapshot?
     func select(_ range: NSRange, in field: VoiceRewriteFieldSnapshot) -> Bool
     func replaceSelectedText(_ text: String, in field: VoiceRewriteFieldSnapshot) -> Bool
     func replaceValue(_ text: String, in field: VoiceRewriteFieldSnapshot) -> Bool
@@ -54,6 +57,10 @@ private func validVoiceRange(_ range: NSRange, in text: String) -> Bool {
 
 extension VoiceRewriteAccessibility {
     public func waitForUpdate() async { try? await Task.sleep(for: .milliseconds(40)) }
+    /// Default: the frontmost field is the field, no matter which client asked.
+    public func focusedField(matching client: (any IMKTextInput)?) -> VoiceRewriteFieldSnapshot? {
+        focusedField()
+    }
 }
 
 /// Captured after recording starts, before the host inserts its dictation result.
@@ -131,6 +138,7 @@ extension VoiceRewriteAccessibility {
     fileprivate var verifiedAfter: VoiceRewriteFieldSnapshot?
     private var attempted = false
     private var observedUnchanged = false
+    private var caretRestored = false
     private let explicitSelection: NSRange?
 
     public init?(client: any IMKTextInput, origin: VoiceDictationOrigin? = nil,
@@ -252,6 +260,26 @@ extension VoiceRewriteAccessibility {
         return .contextChanged
     }
 
+    /// Collapse the caret onto the end of a recent-dictation span after the user cancelled
+    /// the rewrite, so editing continues where the dictation sits. One shot: the single
+    /// allowed restore is spent by a success or a failed select, and it never writes text.
+    public func restoreCaretIfNeeded(client: (any IMKTextInput)?) -> VoiceRewriteRestoreOutcome {
+        if let refused = VoiceRewriteRestoreOutcome.precondition(
+            isRecentDictation: isRecentDictation, inserted: insertedText != nil, alreadyRestored: caretRestored) {
+            return refused
+        }
+        guard let client else { return .noClient }
+        guard let field, accessibility.isTrusted,
+              let current = accessibility.focusedField(matching: client), current.usable,
+              current.bundleID == client.bundleIdentifier(), current.sameField(as: field) else { return .fieldChanged }
+        guard current.value == field.value else { return .valueChanged }
+        guard current.selection == range else { return .selectionChanged }
+        caretRestored = true
+        let caret = NSRange(location: NSMaxRange(range), length: 0)
+        guard accessibility.select(caret, in: current) else { return .selectFailed }
+        return .restored
+    }
+
     /// Manual selection can become a new tracked target only after verified AX output.
     public func committedOrigin(sessionID: UUID, transcript: String) -> VoiceDictationOrigin? {
         guard let insertedText, let after = verifiedAfter, accessibility.isTrusted,
@@ -270,21 +298,77 @@ extension VoiceRewriteAccessibility {
         return current
     }
 
+    /// Why a rewrite target cannot be used, mirroring `preparationFailureMessage` branch for branch
+    /// so the UI can switch on a reason instead of parsing Chinese text. Nil means the origin span
+    /// is verified and the field selection already covers it.
+    public enum TargetFailureReason: Equatable, Sendable {
+        case untrusted
+        case noFocusedField
+        case fieldUnusable
+        case originMismatch
+        case noOrigin
+        case selectionInvalid
+    }
+
+    public static func targetFailureReason(client: any IMKTextInput, origin: VoiceDictationOrigin?,
+                                            accessibility: (any VoiceRewriteAccessibility)? = nil) -> TargetFailureReason? {
+        let adapter = accessibility ?? origin?.accessibility ?? VoiceSystemRewriteAccessibility.shared
+        guard adapter.isTrusted else { return .untrusted }
+        guard let current = adapter.focusedField(matching: client) else { return .noFocusedField }
+        guard current.usable else { return .fieldUnusable }
+        guard let origin else { return .noOrigin }
+        guard origin.matches(current) else { return .originMismatch }
+        guard current.selection == origin.range else { return .selectionInvalid }
+        return nil
+    }
+
     public static func preparationFailureMessage(client: any IMKTextInput, origin: VoiceDictationOrigin?,
                                                  accessibility: (any VoiceRewriteAccessibility)? = nil) -> String {
         let adapter = accessibility ?? origin?.accessibility ?? VoiceSystemRewriteAccessibility.shared
-        if !adapter.isTrusted {
+        switch targetFailureReason(client: client, origin: origin, accessibility: adapter) {
+        case .untrusted:
             return "系统当前未授予正在运行的“艾么语音测试”辅助功能权限，请在系统设置核对授权后重新启动输入法"
+        case .noFocusedField:
+            return "无法读取当前输入框，请重新聚焦后重试或手动选中文字"
+        case .fieldUnusable:
+            return "当前输入框不可编辑或受保护，未改写"
+        case .originMismatch:
+            return "输入框或原文已变化，请手动选中文字改写"
+        case .noOrigin:
+            return "没有已验证的最近听写内容，请先听写或手动选中文字"
+        case .selectionInvalid, nil:
+            return "无法安全定位原文，请手动选中文字改写"
         }
-        guard let current = adapter.focusedField() else { return "无法读取当前输入框，请重新聚焦后重试或手动选中文字" }
-        guard current.usable else { return "当前输入框不可编辑或受保护，未改写" }
-        if let origin, !origin.matches(current) { return "输入框或原文已变化，请手动选中文字改写" }
-        return origin == nil ? "没有已验证的最近听写内容，请先听写或手动选中文字" : "无法安全定位原文，请手动选中文字改写"
     }
 }
 
 /// Only verified insertion/readback creates provenance. Retain this independently
 /// of an IMK controller; repeated revisions preserve original session and ASR text.
+
+/// Outcome of moving the caret back to where a rewrite target sat. Every case but
+/// `restored` and `selectFailed` leaves the field untouched.
+public enum VoiceRewriteRestoreOutcome: Equatable, Sendable {
+    case restored
+    case notRecentDictation
+    case alreadyInserted
+    case alreadyRestored
+    case fieldChanged
+    case valueChanged
+    case selectionChanged
+    case noClient
+    case selectFailed
+
+    /// Precondition-only view: why a restore is refused before the field is read.
+    /// Nil when a restore is still allowed. An inserted edit outranks a spent restore,
+    /// and a target that was not a recent dictation is never restored.
+    public static func precondition(isRecentDictation: Bool, inserted: Bool, alreadyRestored: Bool)
+        -> VoiceRewriteRestoreOutcome? {
+        guard isRecentDictation else { return .notRecentDictation }
+        if inserted { return .alreadyInserted }
+        if alreadyRestored { return .alreadyRestored }
+        return nil
+    }
+}
 @MainActor public final class VoiceDictationOrigin {
     public let sessionID: UUID
     public let transcript: String
@@ -373,6 +457,13 @@ extension VoiceRewriteAccessibility {
         return VoiceRewriteFieldSnapshot(element: element, processID: pid, bundleID: bundle, value: value,
             selection: selection(of: element), isEditable: editable, selectedTextSettable: selectedText,
             valueSettable: wholeValue, singleLine: role == kAXTextFieldRole || role == "AXSearchField")
+    }
+    /// The client is the app that would receive the text: when the frontmost field belongs to
+    /// another app there is no field to write and the message must say so.
+    func focusedField(matching client: (any IMKTextInput)?) -> VoiceRewriteFieldSnapshot? {
+        guard let field = focusedField() else { return nil }
+        guard let client else { return field }
+        return field.bundleID == client.bundleIdentifier() ? field : nil
     }
     func select(_ range: NSRange, in field: VoiceRewriteFieldSnapshot) -> Bool {
         guard let element = verifiedElement(field), validVoiceRange(range, in: field.value) else { return false }
