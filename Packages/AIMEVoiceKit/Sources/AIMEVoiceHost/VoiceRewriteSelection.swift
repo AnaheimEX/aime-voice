@@ -5,6 +5,7 @@ import Foundation
 import ApplicationServices
 import AppKit
 import Carbon.HIToolbox
+import os
 public import InputMethodKit
 
 private func validVoiceRange(_ range: NSRange, in text: String) -> Bool {
@@ -422,9 +423,14 @@ public enum VoiceRewriteRestoreOutcome: Equatable, Sendable {
     static let shared = VoiceSystemRewriteAccessibility()
     var isTrusted: Bool { AXIsProcessTrusted() }
 
+    private static let axLogger = Logger(subsystem: "app.zool.aime.voice", category: "rewrite")
+
     func focusedField() -> VoiceRewriteFieldSnapshot? {
         guard isTrusted, !SecureEventInputShield.isSecureEventInput(), let app = NSWorkspace.shared.frontmostApplication,
-              let bundle = app.bundleIdentifier else { return nil }
+              let bundle = app.bundleIdentifier else {
+            Self.axLogger.notice("stage=axField nil reason=precondition trusted=\(self.isTrusted) secure=\(SecureEventInputShield.isSecureEventInput()) frontmost=\(NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "missing", privacy: .public)")
+            return nil
+        }
         let system = AXUIElementCreateSystemWide()
         AXUIElementSetMessagingTimeout(system, 0.15)
         var focused = attribute(kAXFocusedUIElementAttribute, of: system)
@@ -441,16 +447,25 @@ public enum VoiceRewriteRestoreOutcome: Equatable, Sendable {
             }
             focused = attribute(kAXFocusedUIElementAttribute, of: system)
         }
-        guard let raw = focused, CFGetTypeID(raw) == AXUIElementGetTypeID() else { return nil }
+        guard let raw = focused, CFGetTypeID(raw) == AXUIElementGetTypeID() else {
+            Self.axLogger.notice("stage=axField nil reason=noFocusedElement bundle=\(bundle, privacy: .public)")
+            return nil
+        }
         let element = raw as! AXUIElement
         AXUIElementSetMessagingTimeout(element, 0.15)
         var pid: pid_t = 0
-        guard AXUIElementGetPid(element, &pid) == .success, pid == app.processIdentifier else { return nil }
+        guard AXUIElementGetPid(element, &pid) == .success, pid == app.processIdentifier else {
+            Self.axLogger.notice("stage=axField nil reason=pidMismatch bundle=\(bundle, privacy: .public) elementPid=\(pid) appPid=\(app.processIdentifier)")
+            return nil
+        }
         let role = attribute(kAXRoleAttribute, of: element) as? String ?? ""
         let subrole = attribute(kAXSubroleAttribute, of: element) as? String ?? ""
         // Reject secure controls before reading their value.
         guard ![role, subrole].contains(where: { $0.lowercased().contains("secure") || $0.lowercased().contains("password") }),
-              let value = attribute(kAXValueAttribute, of: element) as? String else { return nil }
+              let value = attribute(kAXValueAttribute, of: element) as? String else {
+            Self.axLogger.notice("stage=axField nil reason=secureOrNoValue bundle=\(bundle, privacy: .public) role=\(role, privacy: .public) subrole=\(subrole, privacy: .public)")
+            return nil
+        }
         let selectedText = settable(kAXSelectedTextAttribute, of: element)
         let wholeValue = settable(kAXValueAttribute, of: element)
         let editable = selectedText || wholeValue || settable(kAXSelectedTextRangeAttribute, of: element)
@@ -463,7 +478,11 @@ public enum VoiceRewriteRestoreOutcome: Equatable, Sendable {
     func focusedField(matching client: (any IMKTextInput)?) -> VoiceRewriteFieldSnapshot? {
         guard let field = focusedField() else { return nil }
         guard let client else { return field }
-        return field.bundleID == client.bundleIdentifier() ? field : nil
+        guard field.bundleID == client.bundleIdentifier() else {
+            Self.axLogger.notice("stage=axField nil reason=bundleMismatch fieldBundle=\(field.bundleID, privacy: .public) clientBundle=\(client.bundleIdentifier() ?? "nil", privacy: .public)")
+            return nil
+        }
+        return field
     }
     func select(_ range: NSRange, in field: VoiceRewriteFieldSnapshot) -> Bool {
         guard let element = verifiedElement(field), validVoiceRange(range, in: field.value) else { return false }

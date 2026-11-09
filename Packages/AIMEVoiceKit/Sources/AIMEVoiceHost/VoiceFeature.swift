@@ -268,6 +268,8 @@ public final class VoiceFeature {
                 guard let current = self.snapshot?.client else { self.voicePreparation = nil; return }
                 guard let selection = VoiceRewriteSelection(client: current, origin: origin) else {
                     self.voicePreparation = nil
+                    let reason = VoiceRewriteSelection.targetFailureReason(client: current, origin: origin)
+                    voiceLatencyLogger.notice("stage=rewritePrepare failed reason=\(String(describing: reason), privacy: .public) hasOrigin=\(origin != nil) clientBundle=\(current.bundleIdentifier() ?? "nil", privacy: .public)")
                     showStatus(VoiceRewriteSelection.preparationFailureMessage(client: current, origin: origin))
                     return
                 }
