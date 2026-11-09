@@ -88,7 +88,7 @@ import XCTest
         fake.userEdits("你好世界!", selection: NSRange(location: 5, length: 0))
         XCTAssertEqual(VoiceRewriteSelection.targetFailureReason(client: client, origin: origin, accessibility: fake), .originMismatch)
         fake.isSecure = true
-        XCTAssertEqual(VoiceRewriteSelection.targetFailureReason(client: client, origin: origin, accessibility: fake), .fieldUnusable)
+        XCTAssertEqual(VoiceRewriteSelection.targetFailureReason(client: client, origin: origin, accessibility: fake), .fieldProtected)
         fake.hasFocusedField = false
         XCTAssertEqual(VoiceRewriteSelection.targetFailureReason(client: client, origin: origin, accessibility: fake), .noFocusedField)
         fake.isTrusted = false

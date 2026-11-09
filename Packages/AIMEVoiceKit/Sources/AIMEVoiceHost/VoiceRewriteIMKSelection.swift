@@ -1,5 +1,6 @@
 import Foundation
 public import InputMethodKit
+import os
 
 
 /// IMK-only rewrite target, for apps whose input box is not exposed to
@@ -106,6 +107,7 @@ public import InputMethodKit
 /// any AX field: identity is the client bundle plus the verified span text.
 /// Only verified insertion/readback creates provenance, mirroring VoiceDictationOrigin.
 @MainActor public struct VoiceIMKDictationOrigin {
+    fileprivate static let imkLogger = Logger(subsystem: "app.zool.aime.voice", category: "rewrite")
     public let sessionID: UUID
     public let transcript: String
     public let rendered: String
@@ -158,6 +160,12 @@ public import InputMethodKit
             }
             if attempt < 8 { try? await Task.sleep(for: .milliseconds(40)) }
         }
+        // Diagnose why the span could not be verified: the caret placement or the
+        // readback. Only positions and lengths are logged, never the dictated text.
+        let after = client.selectedRange()
+        let span = NSRange(location: before.location, length: text.utf16.count)
+        let readback = client.attributedSubstring(from: span)?.string == text
+        imkLogger.notice("stage=afterDictation nil reason=retriesExhausted beforeAt=\(before.location) afterLoc=\(after.location) afterLen=\(after.length) textLen=\(text.utf16.count) readback=\(readback) marked=\(client.markedRange().location != NSNotFound)")
         return nil
     }
 

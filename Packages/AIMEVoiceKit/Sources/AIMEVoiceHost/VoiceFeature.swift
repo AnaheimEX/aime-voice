@@ -277,10 +277,11 @@ public final class VoiceFeature {
                 guard let selection = VoiceRewriteSelection(client: current, origin: origin) else {
                     let reason = VoiceRewriteSelection.targetFailureReason(client: current, origin: origin)
                     voiceLatencyLogger.notice("stage=rewritePrepare failed reason=\(String(describing: reason), privacy: .public) hasOrigin=\(origin != nil) clientBundle=\(current.bundleIdentifier() ?? "nil", privacy: .public)")
-                    // Qt/web apps expose no focused control through AX: rewrite through the IMK
-                    // client itself, using the verified recent dictation or a manual selection.
-                    // A protected (secure) field never takes this path.
-                    if reason == .noFocusedField {
+                    // Qt/web apps expose no focused control through AX, and some custom views
+                    // report themselves as non-editable even though the IMK client still works:
+                    // rewrite through the IMK client itself, using the verified recent dictation
+                    // or a manual selection. A protected (secure) field never takes this path.
+                    if reason == .noFocusedField || reason == .fieldNotEditable {
                         let imkOrigin = await self.recentVoice.latestIMK()
                         if let imkSelection = VoiceRewriteIMKSelection(client: current, imkOrigin: imkOrigin) {
                             let prepared = await imkSelection.prepare(in: current)

@@ -305,7 +305,8 @@ extension VoiceRewriteAccessibility {
     public enum TargetFailureReason: Equatable, Sendable {
         case untrusted
         case noFocusedField
-        case fieldUnusable
+        case fieldProtected
+        case fieldNotEditable
         case originMismatch
         case noOrigin
         case selectionInvalid
@@ -316,7 +317,7 @@ extension VoiceRewriteAccessibility {
         let adapter = accessibility ?? origin?.accessibility ?? VoiceSystemRewriteAccessibility.shared
         guard adapter.isTrusted else { return .untrusted }
         guard let current = adapter.focusedField(matching: client) else { return .noFocusedField }
-        guard current.usable else { return .fieldUnusable }
+        guard current.usable else { return current.isSecure ? .fieldProtected : .fieldNotEditable }
         guard let origin else { return .noOrigin }
         guard origin.matches(current) else { return .originMismatch }
         guard current.selection == origin.range else { return .selectionInvalid }
@@ -331,7 +332,7 @@ extension VoiceRewriteAccessibility {
             return "系统当前未授予正在运行的“艾么语音测试”辅助功能权限，请在系统设置核对授权后重新启动输入法"
         case .noFocusedField:
             return "无法读取当前输入框，请重新聚焦后重试或手动选中文字"
-        case .fieldUnusable:
+        case .fieldProtected, .fieldNotEditable:
             return "当前输入框不可编辑或受保护，未改写"
         case .originMismatch:
             return "输入框或原文已变化，请手动选中文字改写"
