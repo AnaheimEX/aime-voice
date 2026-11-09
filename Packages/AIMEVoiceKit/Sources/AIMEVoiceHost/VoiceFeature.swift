@@ -137,6 +137,11 @@ public final class VoiceFeature {
         let target: VoiceCommitTarget
         let rewriteSelection: VoiceRewriteSelection?
         let origin: VoiceDictationOrigin?
+        /// Rewrite target for apps that expose no AX field: the span lives in the
+        /// IMK client and is verified by readback instead of AX selection.
+        let imkRewriteSelection: VoiceRewriteIMKSelection?
+        let imkOrigin: VoiceIMKDictationOrigin?
+        var isRewrite: Bool { rewriteSelection != nil || imkRewriteSelection != nil }
         let settings: VoiceSettings
         var completion: VoiceCompletionState
         var transcript: String { completion.transcript }
@@ -151,17 +156,20 @@ public final class VoiceFeature {
         var recording = false
 
         init(bridge: VoiceServiceBridge, client: any IMKTextInput, settings: VoiceSettings, recordingKeyCode: UInt16,
-             rewriteSelection: VoiceRewriteSelection? = nil, origin: VoiceDictationOrigin? = nil) {
+             rewriteSelection: VoiceRewriteSelection? = nil, origin: VoiceDictationOrigin? = nil,
+             imkRewriteSelection: VoiceRewriteIMKSelection? = nil, imkOrigin: VoiceIMKDictationOrigin? = nil) {
             self.bridge = bridge
             id = UUID().uuidString
-            completion = VoiceCompletionState(sessionID: id, isRewrite: rewriteSelection != nil)
+            completion = VoiceCompletionState(sessionID: id, isRewrite: rewriteSelection != nil || imkRewriteSelection != nil)
             target = VoiceCommitTarget(client: client)
             self.rewriteSelection = rewriteSelection
             self.origin = origin
+            self.imkRewriteSelection = imkRewriteSelection
+            self.imkOrigin = imkOrigin
             self.settings = settings
-            toggleShortcut = rewriteSelection == nil ? settings.toggleShortcut : settings.rewriteShortcut
+            toggleShortcut = imkRewriteSelection != nil || rewriteSelection != nil ? settings.rewriteShortcut : settings.toggleShortcut
             cancelShortcut = settings.cancelShortcut
-            recordingGesture = rewriteSelection == nil ? settings.recordingGesture : "toggle"
+            recordingGesture = imkRewriteSelection != nil || rewriteSelection != nil ? "toggle" : settings.recordingGesture
             self.recordingKeyCode = recordingKeyCode
 
         }
@@ -267,9 +275,30 @@ public final class VoiceFeature {
                 guard !Task.isCancelled, let self else { return }
                 guard let current = self.snapshot?.client else { self.voicePreparation = nil; return }
                 guard let selection = VoiceRewriteSelection(client: current, origin: origin) else {
-                    self.voicePreparation = nil
                     let reason = VoiceRewriteSelection.targetFailureReason(client: current, origin: origin)
                     voiceLatencyLogger.notice("stage=rewritePrepare failed reason=\(String(describing: reason), privacy: .public) hasOrigin=\(origin != nil) clientBundle=\(current.bundleIdentifier() ?? "nil", privacy: .public)")
+                    // Qt/web apps expose no focused control through AX: rewrite through the IMK
+                    // client itself, using the verified recent dictation or a manual selection.
+                    // A protected (secure) field never takes this path.
+                    if reason == .noFocusedField {
+                        let imkOrigin = await self.recentVoice.latestIMK()
+                        if let imkSelection = VoiceRewriteIMKSelection(client: current, imkOrigin: imkOrigin) {
+                            let prepared = await imkSelection.prepare(in: current)
+                            guard !Task.isCancelled else { return }
+                            self.voicePreparation = nil
+                            guard prepared, self.snapshot?.canStart == true else {
+                                showStatus("无法确认改写选区，原文未改动")
+                                return
+                            }
+                            voiceLatencyLogger.notice("stage=rewritePrepare imkFallback hasOrigin=\(imkOrigin != nil) explicit=\(imkSelection.isRecentDictation == false)")
+                            self.beginVoice(client: current, settings: settings, recordingKeyCode: recordingKeyCode,
+                                            selection: nil, origin: nil,
+                                            imkSelection: imkSelection,
+                                            imkOrigin: imkOrigin.flatMap { $0.owns(imkSelection, client: current) ? $0 : nil })
+                            return
+                        }
+                    }
+                    self.voicePreparation = nil
                     showStatus(VoiceRewriteSelection.preparationFailureMessage(client: current, origin: origin))
                     return
                 }
@@ -293,9 +322,11 @@ public final class VoiceFeature {
     }
 
     private func beginVoice(client: any IMKTextInput, settings: VoiceSettings,
-                            recordingKeyCode: UInt16, selection: VoiceRewriteSelection?, origin: VoiceDictationOrigin?) {
+                            recordingKeyCode: UInt16, selection: VoiceRewriteSelection?, origin: VoiceDictationOrigin?,
+                            imkSelection: VoiceRewriteIMKSelection? = nil, imkOrigin: VoiceIMKDictationOrigin? = nil) {
         let session = VoiceInputSession(bridge: VoiceServiceBridge(channel: channel), client: client, settings: settings, recordingKeyCode: recordingKeyCode,
-                                        rewriteSelection: selection, origin: origin)
+                                        rewriteSelection: selection, origin: origin,
+                                        imkRewriteSelection: imkSelection, imkOrigin: imkOrigin)
         voice = session
         session.bridge.onEvent = { [weak self, weak session] event in
             guard let self, let session, self.voice === session else { return }
@@ -304,7 +335,7 @@ public final class VoiceFeature {
                 guard !session.recording else { return }
                 session.recording = true
                 feedback(.cue(recording: true))
-                if session.rewriteSelection == nil, AXIsProcessTrusted() {
+                if !session.isRewrite, AXIsProcessTrusted() {
                     session.anchorTask = Task { @MainActor [weak self, weak session] in
                         for attempt in 0..<3 {
                             guard !Task.isCancelled, let self, let session, self.voice === session else { return }
@@ -328,7 +359,7 @@ public final class VoiceFeature {
                 if session.recording { feedback(.cue(recording: false)) }
                 session.recording = false
                 feedback(.state(.transcribing))
-            case "processing": feedback(.state(session.rewriteSelection == nil ? .processing : .rewriting))
+            case "processing": feedback(.state(session.isRewrite ? .rewriting : .processing))
             case "completed":
                 switch session.completion.receive(event) {
                 case .commit(let text):
@@ -348,8 +379,8 @@ public final class VoiceFeature {
         feedback(.state(.preparing))
         session.task = Task { @MainActor [weak self, weak session] in
             guard let self, let session else { return }
-            do { try await session.bridge.start(VoiceRequest(sessionID: session.id, settings: settings, rewriteText: selection?.text,
-                                                                 rewriteSingleLine: selection?.isSingleLine)) }
+            do { try await session.bridge.start(VoiceRequest(sessionID: session.id, settings: settings, rewriteText: selection?.text ?? imkSelection?.text,
+                                                                 rewriteSingleLine: selection?.isSingleLine ?? imkSelection?.isSingleLine)) }
             catch {
                 guard self.voice === session else { return }
                 self.cancelVoice()
@@ -390,12 +421,18 @@ public final class VoiceFeature {
         }
         let current = snapshot.client
         present(.hideCandidates)
+        // The caret before insertion creates IMK provenance for apps that expose no
+        // AX field: the rewrite can then verify the committed span by readback.
+        let caretBefore = current.selectedRange()
         let rejection: VoiceCommitTarget.Rejection?
         if let selection = session.rewriteSelection { rejection = await selection.insert(text, into: current, allowEmpty: text.isEmpty) }
+        else if let imkSelection = session.imkRewriteSelection { rejection = await imkSelection.insert(text, into: current, allowEmpty: text.isEmpty) }
         else { rejection = session.target.insert(text, into: current) }
         if let rejection {
             voiceLatencyLogger.notice("commitRejected=\(rejection.rawValue, privacy: .public) app=\(current.bundleIdentifier() ?? "?", privacy: .public)")
-            reject(session.rewriteSelection?.preparationFailureMessage ?? "输入位置已变化，语音结果未写入")
+            reject(session.rewriteSelection?.preparationFailureMessage
+                   ?? session.imkRewriteSelection?.preparationFailureMessage
+                   ?? "输入位置已变化，语音结果未写入")
             return
         }
         if let selection = session.rewriteSelection {
@@ -406,14 +443,26 @@ public final class VoiceFeature {
                 updated = UUID(uuidString: session.id).flatMap { selection.committedOrigin(sessionID: $0, transcript: "") }
             }
             recentVoice.replace(updated)
+            recentVoice.replaceIMK(nil)
+        } else if let imkSelection = session.imkRewriteSelection {
+            let updated: VoiceIMKDictationOrigin?
+            if let imkOrigin = session.imkOrigin {
+                updated = imkOrigin.advanced(target: imkSelection, replacement: text, client: current)
+            } else {
+                updated = UUID(uuidString: session.id).flatMap { imkSelection.committedOrigin(sessionID: $0, transcript: session.transcript, client: current) }
+            }
+            recentVoice.replace(nil)
+            recentVoice.replaceIMK(updated)
         } else if let id = UUID(uuidString: session.id) {
             recentVoice.track(anchor: session.anchor, sessionID: id,
                 transcript: session.transcript, committed: text, client: current)
+            recentVoice.trackIMK(before: caretBefore, sessionID: id,
+                transcript: session.transcript, text: text, client: current)
         }
         let elapsed = commitStarted.duration(to: .now)
         let milliseconds = Int(elapsed.components.seconds * 1000 + elapsed.components.attoseconds / 1_000_000_000_000_000)
         voiceLatencyLogger.notice("commitMs=\(milliseconds) app=\(current.bundleIdentifier() ?? "?", privacy: .public)")
-        if session.rewriteSelection == nil, let processing = session.completion.processing {
+        if !session.isRewrite, let processing = session.completion.processing {
             VoicePolishObservation.recordAfterCommit(transcript: session.transcript, committed: text,
                                                     settings: session.settings, processing: processing)
         }
