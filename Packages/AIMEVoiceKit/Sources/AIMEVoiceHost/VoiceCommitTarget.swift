@@ -11,7 +11,9 @@ public final class VoiceCommitTarget {
 
     private let client: any IMKTextInput
     private let bundleID: String?
-    private let range: NSRange
+    /// Caret captured while the input event was being handled. IMK clients answer
+    /// the proxy only in that window; a later async read returns stale values (0).
+    public let range: NSRange
     private let contextRange: NSRange
     private let context: String?
 

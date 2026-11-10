@@ -423,8 +423,9 @@ public final class VoiceFeature {
         let current = snapshot.client
         present(.hideCandidates)
         // The caret before insertion creates IMK provenance for apps that expose no
-        // AX field: the rewrite can then verify the committed span by readback.
-        let caretBefore = current.selectedRange()
+        // AX field. It comes from the commit target, captured while the input event
+        // was handled: reading the IMK proxy here would return stale values (0).
+        let caretBefore = session.target.range
         let rejection: VoiceCommitTarget.Rejection?
         if let selection = session.rewriteSelection { rejection = await selection.insert(text, into: current, allowEmpty: text.isEmpty) }
         else if let imkSelection = session.imkRewriteSelection { rejection = await imkSelection.insert(text, into: current, allowEmpty: text.isEmpty) }
