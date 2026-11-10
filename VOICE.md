@@ -2,6 +2,8 @@
 
 > **Fork 说明**：本仓库是 [zoolapp/aime](https://github.com/zoolapp/aime) 的个人定制分支，在上游中文输入法之上**独立叠加**了一套本地语音输入与语音改写模块。
 >
+> **这是一个个人兴趣项目**。不是上游官方分支，不打算替代上游，也没有商业化计划——只是觉得把自己的语音模块装进一个趁手的中文输入法很好用，于是做了并开源出来。代码按「能用、可读」的标准写，不承诺稳定性与长期维护。
+>
 > **上游代码保持原样**：本分支不改写上游任何源文件，只新增独立的 Swift Package 与构建入口。上游更新时通过 `git merge` 跟进，不做手工拼改。
 
 [上游 README](README.md) · [文档索引](docs/README.md) · [语音模块设计](docs/voice-module-design.md) · [隐私说明](docs/privacy.md)
@@ -134,7 +136,7 @@ bash scripts/local-preview-build64/build.sh <构建号> --install
 测试：
 
 ```bash
-swift test --package-path Packages/AIMEVoiceKit        # 93 项
+swift test --package-path Packages/AIMEVoiceKit        # 125 项
 python3 scripts/tests/test_voice_feature.py            # 宿主与 AX 改写场景
 python3 scripts/tests/test_voice_routing.py <check>    # 路由与协议
 bash scripts/check-local-seam.sh                       # 接缝断言
