@@ -6,6 +6,12 @@
 include:
   - project.yml
 
+# The voice package (Packages/AIMEVoiceKit) targets macOS 26 (docs/decisions/0004);
+# upstream may support older systems, the local build does not.
+options:
+  deploymentTarget:
+    macOS: "26.0"
+
 settings:
   base:
     ENABLE_DEBUG_DYLIB: NO
