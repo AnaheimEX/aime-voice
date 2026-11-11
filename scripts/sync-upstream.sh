@@ -31,19 +31,19 @@ else
 fi
 [ "${1:-}" = "--dry-run" ] && exit 0
 
-if ! git merge --no-edit origin/main; then
+if ! git merge --no-commit --no-edit origin/main; then
   conflicted=$(git diff --name-only --diff-filter=U || true)
-  if [ -n "$conflicted" ] && echo "$conflicted" | xargs python3 scripts/seam-hooks.py reapply-from MERGE_HEAD; then
-    echo "$conflicted" | xargs git add --
-    scripts/check-local-seam.sh
-    git commit --no-edit
-    echo "sync-upstream: hook conflicts auto-resolved by scripts/seam-hooks.py"
-  else
-    echo "sync-upstream: merge stopped with non-hook conflicts." >&2
+  if [ -n "$conflicted" ] && ! echo "$conflicted" | xargs python3 scripts/seam-hooks.py reapply-from MERGE_HEAD; then
+    echo "sync-upstream: merge stopped with non-hook conflicts:" >&2
     git diff --name-only --diff-filter=U >&2 || true
     exit 1
   fi
 fi
 
+# Always regenerate all 9 hook files directly from origin/main + seam-hooks so 3-way merge
+# heuristics can never misplace a hook line.
+python3 scripts/seam-hooks.py reapply-from origin/main
+python3 scripts/seam-hooks.py files | xargs git add --
 scripts/check-local-seam.sh
+git commit --no-edit
 echo "sync-upstream: origin/main merged; run scripts/check-local-seam.sh --build before the next local build"

@@ -66,7 +66,7 @@ scripts/sync-upstream.sh --dry-run   # 只预报冲突，不改任何文件
 scripts/sync-upstream.sh
 ```
 
-脚本开启仓库级 `rerere`，执行 `git fetch origin`，先用 `scripts/seam-hooks.py check-upstream origin/main` 在内存中验证所有挂钩能否干净注入上游最新代码，再用 `git merge-tree` 预演合并，随后执行 `git merge --no-edit origin/main`。若 9 个挂钩文件发生合并冲突，脚本会自动调用 `python3 scripts/seam-hooks.py reapply-from MERGE_HEAD` 取上游新版并重装挂钩，最后运行 `scripts/check-local-seam.sh`（内部含剥离挂钩后与上游字节级比对）。
+脚本开启仓库级 `rerere`，执行 `git fetch origin`，先用 `scripts/seam-hooks.py check-upstream origin/main` 在内存中验证所有挂钩能否干净注入上游最新代码，再用 `git merge-tree` 预演合并，随后执行 `git merge --no-commit origin/main`。无论 git 是否报冲突，脚本都会用 `python3 scripts/seam-hooks.py reapply-from origin/main` 把 9 个挂钩文件**直接重建为「上游新版 + 本地挂钩」**（避免三方合并把挂钩行放错位置），再运行 `scripts/check-local-seam.sh`（内部含剥离挂钩后与上游字节级比对）并提交合并。只有非挂钩文件冲突时才会停下等人工处理。
 
 平时若需单独拆卸或重装这 9 个文件的挂钩：
 

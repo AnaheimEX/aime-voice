@@ -8,6 +8,7 @@ Subcommands:
   apply [file ...]                Idempotently inject local hooks into upstream files
   strip [file ...]                Idempotently remove local hooks, restoring pure upstream files
   reapply-from <git-ref> [file...] Take pure upstream file(s) from <git-ref> and apply hooks
+  files                           List the upstream files that carry hooks
 """
 
 from __future__ import annotations
@@ -464,11 +465,16 @@ def main(argv: list[str] | None = None) -> int:
     p_reapply.add_argument("ref")
     p_reapply.add_argument("files", nargs="*")
 
+    sub.add_parser("files", help="List the upstream files that carry hooks")
+
     args = parser.parse_args(argv)
     root = repo_root()
     cmd = args.command or "check"
 
     try:
+        if cmd == "files":
+            print("\n".join(FILE_HOOKS))
+            return 0
         if cmd == "check":
             return cmd_check(root, getattr(args, "against", None))
         if cmd == "check-upstream":
