@@ -21,7 +21,7 @@
   <a href="https://github.com/zoolapp/aime/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/zoolapp/aime/ci.yml?branch=main&style=flat-square&label=CI" alt="CI"></a>
   <a href="https://github.com/zoolapp/aime/releases"><img src="https://img.shields.io/github/v/release/zoolapp/aime?include_prereleases&style=flat-square&label=release" alt="Release"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-2f855a?style=flat-square" alt="MIT"></a>
-  <img src="https://img.shields.io/badge/macOS-26%2B-111111?style=flat-square&logo=apple" alt="macOS 26+">
+  <img src="https://img.shields.io/badge/macOS-15%2B-111111?style=flat-square&logo=apple" alt="macOS 15+">
   <img src="https://img.shields.io/badge/Swift-6-F05138?style=flat-square&logo=swift&logoColor=white" alt="Swift 6">
   <img src="https://img.shields.io/badge/librime-1.17-B64032?style=flat-square" alt="librime 1.17">
 </p>
@@ -103,7 +103,7 @@ Then add the input method as in step 3 below. Upgrade with `brew upgrade --cask 
 
 The app runs on Apple silicon and Intel Macs; the `aime` CLI is Apple silicon only for now.
 
-Building from source requires macOS 26+, Xcode 26+ and [XcodeGen](https://github.com/yonaskolb/XcodeGen) (`brew install xcodegen`).
+AIME runs on macOS 15+ (the Apple on-device model needs macOS 26+). Building from source requires Xcode 26+ (macOS 15.6+) and [XcodeGen](https://github.com/yonaskolb/XcodeGen) (`brew install xcodegen`).
 
 ```bash
 git clone https://github.com/zoolapp/aime.git && cd aime
@@ -174,27 +174,12 @@ Text reaches an AI model only when you run an AI action: Apple's on-device model
 
 ## Contributors
 
-Thanks to everyone who helps build AIME: anyone who has opened a pull request or an issue is listed here.
-
-**Code**
+Thanks to everyone who helps build AIME: anyone who has opened a pull request is listed here.
 
 <p>
 <a href="https://github.com/foru17" title="@foru17"><img src="https://avatars.githubusercontent.com/u/1920586?v=4&s=96" width="48" height="48" alt="@foru17"></a>
 <a href="https://github.com/miantiao-me" title="@miantiao-me"><img src="https://avatars.githubusercontent.com/u/2959393?v=4&s=96" width="48" height="48" alt="@miantiao-me"></a>
-</p>
-
-**Feedback and ideas**
-
-<p>
-<a href="https://github.com/BlackCCCat" title="@BlackCCCat"><img src="https://avatars.githubusercontent.com/u/44139461?v=4&s=96" width="48" height="48" alt="@BlackCCCat"></a>
-<a href="https://github.com/liustar2011-afk" title="@liustar2011-afk"><img src="https://avatars.githubusercontent.com/u/275464398?v=4&s=96" width="48" height="48" alt="@liustar2011-afk"></a>
-<a href="https://github.com/ShingmoYeung" title="@ShingmoYeung"><img src="https://avatars.githubusercontent.com/u/14231553?v=4&s=96" width="48" height="48" alt="@ShingmoYeung"></a>
-<a href="https://github.com/uu-myheart" title="@uu-myheart"><img src="https://avatars.githubusercontent.com/u/18180275?v=4&s=96" width="48" height="48" alt="@uu-myheart"></a>
-<a href="https://github.com/gaoyuanzong" title="@gaoyuanzong"><img src="https://avatars.githubusercontent.com/u/3156656?v=4&s=96" width="48" height="48" alt="@gaoyuanzong"></a>
-<a href="https://github.com/sunpm" title="@sunpm"><img src="https://avatars.githubusercontent.com/u/35005831?v=4&s=96" width="48" height="48" alt="@sunpm"></a>
-<a href="https://github.com/liuhao320" title="@liuhao320"><img src="https://avatars.githubusercontent.com/u/38712559?v=4&s=96" width="48" height="48" alt="@liuhao320"></a>
-<a href="https://github.com/txchen" title="@txchen"><img src="https://avatars.githubusercontent.com/u/713074?v=4&s=96" width="48" height="48" alt="@txchen"></a>
-<a href="https://github.com/morigith" title="@morigith"><img src="https://avatars.githubusercontent.com/u/73282352?v=4&s=96" width="48" height="48" alt="@morigith"></a>
+<a href="https://github.com/takeshi264" title="@takeshi264"><img src="https://avatars.githubusercontent.com/u/11970938?v=4&s=96" width="48" height="48" alt="@takeshi264"></a>
 </p>
 
 ## Acknowledgements

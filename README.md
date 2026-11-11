@@ -21,7 +21,7 @@
   <a href="https://github.com/zoolapp/aime/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/zoolapp/aime/ci.yml?branch=main&style=flat-square&label=CI" alt="CI"></a>
   <a href="https://github.com/zoolapp/aime/releases"><img src="https://img.shields.io/github/v/release/zoolapp/aime?include_prereleases&style=flat-square&label=release" alt="Release"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-2f855a?style=flat-square" alt="MIT"></a>
-  <img src="https://img.shields.io/badge/macOS-26%2B-111111?style=flat-square&logo=apple" alt="macOS 26+">
+  <img src="https://img.shields.io/badge/macOS-15%2B-111111?style=flat-square&logo=apple" alt="macOS 15+">
   <img src="https://img.shields.io/badge/Swift-6-F05138?style=flat-square&logo=swift&logoColor=white" alt="Swift 6">
   <img src="https://img.shields.io/badge/librime-1.17-B64032?style=flat-square" alt="librime 1.17">
 </p>
@@ -103,7 +103,7 @@ brew install --cask zoolapp/tap/aime
 
 App 支持 Apple 芯片与 Intel 的 Mac；命令行工具 `aime` 目前仅支持 Apple 芯片。
 
-从源码构建需要 macOS 26+、Xcode 26+ 与 [XcodeGen](https://github.com/yonaskolb/XcodeGen)（`brew install xcodegen`）。
+运行需要 macOS 15+（Apple 端侧模型需 macOS 26+）。从源码构建需要 Xcode 26+（macOS 15.6+） 与 [XcodeGen](https://github.com/yonaskolb/XcodeGen)（`brew install xcodegen`）。
 
 ```bash
 git clone https://github.com/zoolapp/aime.git && cd aime
@@ -174,27 +174,12 @@ xcodegen generate && open AIME.xcodeproj
 
 ## 贡献者
 
-感谢每一位参与共建的朋友：提交过 PR 或 Issue 的人都会列在这里。
-
-**代码**
+感谢每一位参与共建的朋友：提交过 PR 的人都会列在这里。
 
 <p>
 <a href="https://github.com/foru17" title="@foru17"><img src="https://avatars.githubusercontent.com/u/1920586?v=4&s=96" width="48" height="48" alt="@foru17"></a>
 <a href="https://github.com/miantiao-me" title="@miantiao-me"><img src="https://avatars.githubusercontent.com/u/2959393?v=4&s=96" width="48" height="48" alt="@miantiao-me"></a>
-</p>
-
-**反馈与建议**
-
-<p>
-<a href="https://github.com/BlackCCCat" title="@BlackCCCat"><img src="https://avatars.githubusercontent.com/u/44139461?v=4&s=96" width="48" height="48" alt="@BlackCCCat"></a>
-<a href="https://github.com/liustar2011-afk" title="@liustar2011-afk"><img src="https://avatars.githubusercontent.com/u/275464398?v=4&s=96" width="48" height="48" alt="@liustar2011-afk"></a>
-<a href="https://github.com/ShingmoYeung" title="@ShingmoYeung"><img src="https://avatars.githubusercontent.com/u/14231553?v=4&s=96" width="48" height="48" alt="@ShingmoYeung"></a>
-<a href="https://github.com/uu-myheart" title="@uu-myheart"><img src="https://avatars.githubusercontent.com/u/18180275?v=4&s=96" width="48" height="48" alt="@uu-myheart"></a>
-<a href="https://github.com/gaoyuanzong" title="@gaoyuanzong"><img src="https://avatars.githubusercontent.com/u/3156656?v=4&s=96" width="48" height="48" alt="@gaoyuanzong"></a>
-<a href="https://github.com/sunpm" title="@sunpm"><img src="https://avatars.githubusercontent.com/u/35005831?v=4&s=96" width="48" height="48" alt="@sunpm"></a>
-<a href="https://github.com/liuhao320" title="@liuhao320"><img src="https://avatars.githubusercontent.com/u/38712559?v=4&s=96" width="48" height="48" alt="@liuhao320"></a>
-<a href="https://github.com/txchen" title="@txchen"><img src="https://avatars.githubusercontent.com/u/713074?v=4&s=96" width="48" height="48" alt="@txchen"></a>
-<a href="https://github.com/morigith" title="@morigith"><img src="https://avatars.githubusercontent.com/u/73282352?v=4&s=96" width="48" height="48" alt="@morigith"></a>
+<a href="https://github.com/takeshi264" title="@takeshi264"><img src="https://avatars.githubusercontent.com/u/11970938?v=4&s=96" width="48" height="48" alt="@takeshi264"></a>
 </p>
 
 ## 致谢
