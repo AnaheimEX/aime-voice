@@ -21,21 +21,28 @@ fi
 
 echo "sync-upstream: upstream commits:"
 git log --oneline HEAD..origin/main
+python3 scripts/seam-hooks.py check-upstream origin/main
 # Merge in memory first: shows the conflicting files without touching the work tree.
 if git merge-tree --write-tree --name-only --no-messages HEAD origin/main >/dev/null; then
   echo "sync-upstream: no conflicts predicted"
 else
-  echo "sync-upstream: conflicts predicted in:"
+  echo "sync-upstream: git merge-tree conflicts predicted in (seam-hooks will auto-resolve hook files):"
   git merge-tree --write-tree --name-only --no-messages HEAD origin/main | tail -n +2
 fi
 [ "${1:-}" = "--dry-run" ] && exit 0
 
 if ! git merge --no-edit origin/main; then
-  echo "sync-upstream: merge stopped." >&2
-  echo "Take upstream for each conflicted upstream file, put the hook lines back (docs/upstream-merge.md)," >&2
-  echo "then: git add <files> && scripts/check-local-seam.sh --build && git merge --continue" >&2
-  git diff --name-only --diff-filter=U >&2 || true
-  exit 1
+  conflicted=$(git diff --name-only --diff-filter=U || true)
+  if [ -n "$conflicted" ] && echo "$conflicted" | xargs python3 scripts/seam-hooks.py reapply-from MERGE_HEAD; then
+    echo "$conflicted" | xargs git add --
+    scripts/check-local-seam.sh
+    git commit --no-edit
+    echo "sync-upstream: hook conflicts auto-resolved by scripts/seam-hooks.py"
+  else
+    echo "sync-upstream: merge stopped with non-hook conflicts." >&2
+    git diff --name-only --diff-filter=U >&2 || true
+    exit 1
+  fi
 fi
 
 scripts/check-local-seam.sh

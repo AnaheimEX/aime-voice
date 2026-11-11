@@ -66,9 +66,17 @@ scripts/sync-upstream.sh --dry-run   # 只预报冲突，不改任何文件
 scripts/sync-upstream.sh
 ```
 
-脚本开启仓库级 `rerere`，执行 `git fetch origin`，先用 `git merge-tree` 在内存里试合并并列出会冲突的文件，再 `git merge --no-edit origin/main`，最后运行 `scripts/check-local-seam.sh`。
+脚本开启仓库级 `rerere`，执行 `git fetch origin`，先用 `scripts/seam-hooks.py check-upstream origin/main` 在内存中验证所有挂钩能否干净注入上游最新代码，再用 `git merge-tree` 预演合并，随后执行 `git merge --no-edit origin/main`。若 9 个挂钩文件发生合并冲突，脚本会自动调用 `python3 scripts/seam-hooks.py reapply-from MERGE_HEAD` 取上游新版并重装挂钩，最后运行 `scripts/check-local-seam.sh`（内部含剥离挂钩后与上游字节级比对）。
 
-合并因冲突停下时，处理顺序是：
+平时若需单独拆卸或重装这 9 个文件的挂钩：
+
+```bash
+python3 scripts/seam-hooks.py strip   # 剥离全部本地挂钩，使 9 个上游文件恢复 100% 原版
+python3 scripts/seam-hooks.py apply   # 按锚点幂等注入全部本地挂钩
+python3 scripts/seam-hooks.py check   # 校验挂钩完整性及剥离后与上游零差异
+```
+
+若上游大幅改写了某个挂钩所在函数的签名导致自动注入停下，处理顺序是：
 
 1. 本地文件保留本地版本。
 2. 冲突的上游文件取上游版本：`git checkout --theirs <文件>`。

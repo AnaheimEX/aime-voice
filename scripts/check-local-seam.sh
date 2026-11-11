@@ -97,6 +97,7 @@ require_text Apps/AIMESettings/Model/SettingsModel.swift 'LocalBuildInfo.inputMo
 require_text Packages/AIMEKit/Sources/AIMECore/AIMEPaths.swift 'LocalBuildInfo.dataFolderName'
 require_text Packages/AIMEKit/Sources/AIMECore/VocabularySubscriptions.swift 'LocalVocabularyCustomization.afterRebuild'
 require_text Packages/AIMEKit/Sources/AIMECore/VocabularySubscriptions.swift 'LocalVocabularyCustomization.signaturePart'
+python3 scripts/seam-hooks.py check --against "$BASE" >/dev/null
 
 if [ "${1:-}" = "--build" ]; then
   swift build --package-path Packages/AIMEVoiceKit
