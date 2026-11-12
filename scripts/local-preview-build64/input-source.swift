@@ -24,7 +24,11 @@ case "disable":
 case "register":
     let url = URL(fileURLWithPath: arguments[2])
     guard TISRegisterInputSource(url as CFURL) == noErr else { exit(4) }
+    let bundleID = "app.zool.inputmethod.aime"
     let modeID = arguments.count > 3 ? arguments[3] : "app.zool.inputmethod.aime.hans"
+    if let parent = source(bundleID) {
+        _ = TISEnableInputSource(parent)
+    }
     guard let item = source(modeID) else { exit(5) }
     exit(TISEnableInputSource(item) == noErr ? 0 : 6)
 default: exit(1)

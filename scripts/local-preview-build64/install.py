@@ -123,6 +123,7 @@ try:
     copied = True
     shutil.copytree(stage, installed, symlinks=True)
     subprocess.run(["codesign", "--verify", "--deep", "--strict", str(installed)], check=True)
+    subprocess.run([str(installed / "Contents/MacOS/AIME"), "--install"], check=False)
     subprocess.run([str(helper), "register", str(installed), INPUT_MODE_ID], check=True)
 except BaseException:
     if copied and installed.exists():
@@ -146,7 +147,8 @@ for other in sorted({path for path in registered_copies(BUNDLE_ID) if path.resol
 
 if current:
     subprocess.run([str(helper), "select", current], check=False)
-subprocess.run(["open", "-a", str(installed)], check=True)
+# Stop any manually-launched AIME instance so imklaunchagent starts the input method on demand.
+subprocess.run(["/usr/bin/pkill", "-x", "AIME"], check=False)
 subprocess.run(["open", str(installed / "Contents/Applications/AIME Settings.app")], check=True)
 print(f"Installed {installed} (Build {new_version}); all temporary/old bundles removed.")
 print("Active input source:", current)
