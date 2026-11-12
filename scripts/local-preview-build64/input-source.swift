@@ -16,10 +16,16 @@ case "current":
 case "select":
     guard let item = source(arguments[2]) else { exit(2) }
     exit(TISSelectInputSource(item) == noErr ? 0 : 3)
+case "disable":
+    if let item = source(arguments[2]) {
+        _ = TISDisableInputSource(item)
+    }
+    exit(0)
 case "register":
     let url = URL(fileURLWithPath: arguments[2])
     guard TISRegisterInputSource(url as CFURL) == noErr else { exit(4) }
-    guard let item = source("app.zool.inputmethod.aime.voicepreview.hans") else { exit(5) }
+    let modeID = arguments.count > 3 ? arguments[3] : "app.zool.inputmethod.aime.hans"
+    guard let item = source(modeID) else { exit(5) }
     exit(TISEnableInputSource(item) == noErr ? 0 : 6)
 default: exit(1)
 }
