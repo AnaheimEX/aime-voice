@@ -48,10 +48,14 @@ swift build --build-system native --package-path Packages/AIMEKit -c release --p
 CLI="$(swift build --build-system native --package-path Packages/AIMEKit -c release --show-bin-path)"
 
 echo "==> staging and signing"
-mkdir -p "$OUT"
-# Spotlight would register dist apps with LaunchServices as more copies of the input method.
-touch "$(dirname "$OUT")/.metadata_never_index"
+mkdir -p "$OUT" "$ROOT/build"
+# Spotlight would register dist/DerivedData apps with LaunchServices as more copies of the input method.
+touch "$(dirname "$OUT")/.metadata_never_index" "$ROOT/build/.metadata_never_index"
 python3 "$HERE/stage.py" "$ROOT" "$DERIVED/Build/Products/Release" "$REFERENCE" "$APP" "$CLI" --build "$BUILD"
+LSREG="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
+for intermediate in "$DERIVED/Build/Products/Release/AIME.app" "$DERIVED/Build/Products/Release/AIME Settings.app"; do
+  [[ -d "$intermediate" ]] && "$LSREG" -u "$intermediate" 2>/dev/null || true
+done
 # A copied-in source tree or reference keeps Gatekeeper quarantine; macOS will not register a
 # quarantined, self-signed input method.
 xattr -dr com.apple.quarantine "$APP"
@@ -65,3 +69,4 @@ echo "==> signed $APP"
 mkdir -p "$OUT/work"
 swiftc -O "$HERE/input-source.swift" -o "$OUT/work/input-source"
 python3 "$HERE/install.py" "$APP" --helper "$OUT/work/input-source" --work "$OUT/work"
+"$LSREG" -u "$APP" 2>/dev/null || true
