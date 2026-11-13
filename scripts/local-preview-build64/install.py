@@ -70,24 +70,28 @@ def migrate_legacy_preview_data():
 
 
 def unregister_bundle_tree(app_path: pathlib.Path):
-    """Unregister a bundle and any nested .app bundles before removing from disk."""
-    nested_settings = app_path / "Contents/Applications/AIME Settings.app"
-    if nested_settings.exists():
-        subprocess.run([LSREGISTER, "-u", str(nested_settings)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    if app_path.exists():
-        subprocess.run([LSREGISTER, "-u", str(app_path)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    """Unregister a bundle and nested Settings/XPC bundles (even if already absent from disk)."""
+    for target in (
+        app_path / "Contents/Applications/AIME Settings.app",
+        app_path / "Contents/XPCServices/AIME Voice.xpc",
+        app_path,
+    ):
+        subprocess.run([LSREGISTER, "-u", str(target)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
 def remove_legacy_preview_app():
-    """Disable, unregister, and delete the legacy AIME Voice Preview.app and reset its TCC entries."""
+    """Disable, unregister, and delete the legacy AIME Voice Preview.app, symlinks, and TCC entries."""
     for mode in (f"{LEGACY_BUNDLE_ID}.hans", LEGACY_BUNDLE_ID):
         subprocess.run([str(helper), "disable", mode], check=False)
     if legacy_preview.exists():
         stop_processes(str(legacy_preview) + "/")
-        unregister_bundle_tree(legacy_preview)
         shutil.rmtree(legacy_preview, ignore_errors=True)
-    for path in registered_copies(LEGACY_BUNDLE_ID):
-        if path.exists():
+    unregister_bundle_tree(legacy_preview)
+    legacy_settings_link = pathlib.Path("/Applications/AIME Settings.app")
+    if legacy_settings_link.is_symlink() and "AIME Voice Preview.app" in os.readlink(legacy_settings_link):
+        legacy_settings_link.unlink()
+    for bundle_id in (LEGACY_BUNDLE_ID, "app.zool.aime.voicepreview.settings"):
+        for path in registered_copies(bundle_id):
             unregister_bundle_tree(path)
     subprocess.run(["tccutil", "reset", "All", LEGACY_BUNDLE_ID], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
     subprocess.run([LSREGISTER, "-gc"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
@@ -141,14 +145,17 @@ finally:
             unregister_bundle_tree(extra)
             shutil.rmtree(extra, ignore_errors=True)
 
+installed_settings = installed / "Contents/Applications/AIME Settings.app"
 for other in sorted({path for path in registered_copies(BUNDLE_ID) if path.resolve() != installed.resolve()}):
-    if other.exists():
-        subprocess.run([LSREGISTER, "-u", str(other)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    unregister_bundle_tree(other)
+for other in sorted({path for path in registered_copies("app.zool.aime.settings") if path.resolve() != installed_settings.resolve()}):
+    subprocess.run([LSREGISTER, "-u", str(other)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+subprocess.run([LSREGISTER, "-f", str(installed_settings)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 if current:
     subprocess.run([str(helper), "select", current], check=False)
 # Stop any manually-launched AIME instance so imklaunchagent starts the input method on demand.
 subprocess.run(["/usr/bin/pkill", "-x", "AIME"], check=False)
-subprocess.run(["open", str(installed / "Contents/Applications/AIME Settings.app")], check=True)
+subprocess.run(["open", str(installed_settings)], check=True)
 print(f"Installed {installed} (Build {new_version}); all temporary/old bundles removed.")
 print("Active input source:", current)
