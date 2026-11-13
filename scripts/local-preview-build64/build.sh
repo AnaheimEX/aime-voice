@@ -77,9 +77,11 @@ python3 "$HERE/stage.py" "$ROOT" "$DERIVED/Build/Products/Release" "$APP" "$CLI"
 for intermediate in "$DERIVED/Build/Products/Release/AIME.app/Contents/Applications/AIME Settings.app" \
                     "$DERIVED/Build/Products/Release/AIME.app" \
                     "$DERIVED/Build/Products/Release/AIME Settings.app" \
+                    "$DERIVED/Build/Products/Release/AIME Voice.xpc" \
                     "$DERIVED/Build/Products/Debug/AIME.app/Contents/Applications/AIME Settings.app" \
                     "$DERIVED/Build/Products/Debug/AIME.app" \
-                    "$DERIVED/Build/Products/Debug/AIME Settings.app"; do
+                    "$DERIVED/Build/Products/Debug/AIME Settings.app" \
+                    "$DERIVED/Build/Products/Debug/AIME Voice.xpc"; do
   if [[ -d "$intermediate" ]]; then
     "$LSREG" -u "$intermediate" 2>/dev/null || true
     rm -rf "$intermediate"

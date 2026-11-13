@@ -93,6 +93,13 @@ def remove_legacy_preview_app():
     for bundle_id in (LEGACY_BUNDLE_ID, "app.zool.aime.voicepreview.settings"):
         for path in registered_copies(bundle_id):
             unregister_bundle_tree(path)
+        subprocess.run(["defaults", "delete", bundle_id], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
+        for cache_root in ("Library/Preferences", "Library/Caches", "Library/HTTPStorages"):
+            target = home / cache_root / (f"{bundle_id}.plist" if cache_root == "Library/Preferences" else bundle_id)
+            if target.is_dir() and not target.is_symlink():
+                shutil.rmtree(target, ignore_errors=True)
+            elif target.exists() or target.is_symlink():
+                target.unlink(missing_ok=True)
     subprocess.run(["tccutil", "reset", "All", LEGACY_BUNDLE_ID], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
     subprocess.run([LSREGISTER, "-gc"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
     migrate_legacy_preview_data()
