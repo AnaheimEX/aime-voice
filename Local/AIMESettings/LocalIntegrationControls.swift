@@ -1,13 +1,16 @@
 import AppKit
 import SwiftUI
 
-/// The local CLI owns integration and installation. Closing Settings does not
-/// terminate it: output goes to a file, never a pipe owned by the UI process.
+/// Suppresses the official in-app pkg updater on local voice builds and directs
+/// updates through the local sync/build workflow (with optional `.local-update.json` runner).
 struct LocalIntegrationControls: View {
     /// Set by project.local.yml; replaces the official updater controls in the version footer.
     static var replacesUpdater: Bool { Bundle.main.object(forInfoDictionaryKey: "AIMELocalIntegration") as? Bool == true }
 
+    private static let dailyCLICommand = "scripts/sync-upstream.sh && bash scripts/local-preview-build64/build.sh <build> --install"
+
     @AppStorage("localIntegrationRepository") private var repository = ""
+    @State private var showCLIRunner = false
     @State private var running = false
     @State private var notice = ""
     @State private var installationConfigured = false
@@ -17,18 +20,41 @@ struct LocalIntegrationControls: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 12) {
-                Text("本机集成更新").font(.caption.weight(.semibold))
-                Button(repository.isEmpty ? "选择源码目录…" : "更换目录…", action: chooseRepository)
-                Button("检查上游") { start("check") }.disabled(repository.isEmpty || running)
-                Button("同步重建") { start("apply", argument: upstream) }
-                    .disabled(upstream == nil || !installationConfigured || running)
-                Button("回退上版") { start("rollback", argument: rollbackBuild) }
-                    .disabled(rollbackBuild == nil || !installationConfigured || running)
-                if running { ProgressView().controlSize(.small) }
+                Text("本机语音集成 · 已接管更新")
+                    .font(.caption.weight(.semibold))
+                    .help("本机构建包含独立语音模块；已禁用官网自动安装包，避免覆盖丢失语音服务。日常请通过命令行同步上游并重建安装。")
+                Button("复制更新命令", action: copyCLICommand)
+                Button(showCLIRunner ? "收起配置" : "高级配置…") { showCLIRunner.toggle() }
             }
             .controlSize(.small)
+            if showCLIRunner {
+                HStack(spacing: 12) {
+                    Button(repository.isEmpty ? "选择源码目录…" : "更换目录…", action: chooseRepository)
+                    Button("检查上游") { start("check") }.disabled(repository.isEmpty || running)
+                    Button("同步重建") { start("apply", argument: upstream) }
+                        .disabled(upstream == nil || !installationConfigured || running)
+                    Button("回退上版") { start("rollback", argument: rollbackBuild) }
+                        .disabled(rollbackBuild == nil || !installationConfigured || running)
+                    if running { ProgressView().controlSize(.small) }
+                }
+                .controlSize(.small)
+            }
             if !notice.isEmpty { Text(notice).font(.caption).foregroundStyle(Theme.secondaryText) }
         }
+        .onAppear {
+            if hasExplicitCLIConfig { showCLIRunner = true }
+        }
+    }
+
+    private var hasExplicitCLIConfig: Bool {
+        guard !repository.isEmpty else { return false }
+        return FileManager.default.fileExists(atPath: URL(fileURLWithPath: repository).appendingPathComponent(".local-update.json").path)
+    }
+
+    private func copyCLICommand() {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(Self.dailyCLICommand, forType: .string)
+        notice = "已复制命令行更新指令（请在源码根目录运行，并将 <build> 替换为递增构建号）"
     }
 
     private func chooseRepository() {
@@ -36,14 +62,19 @@ struct LocalIntegrationControls: View {
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
         panel.allowsMultipleSelection = false
-        panel.message = "选择已配置本机集成基线的AIME源码目录"
+        panel.message = "选择已配置 .local-update.json 的 AIME 源码目录"
         guard panel.runModal() == .OK, let url = panel.url else { return }
         guard FileManager.default.fileExists(atPath: url.appendingPathComponent("scripts/local-update.py").path) else {
             notice = "该目录没有本机更新命令"; return
         }
         repository = url.path
         upstream = nil; rollbackBuild = nil; installationConfigured = false
-        notice = "先检查上游；缺少集成基线或安全安装条件时会停止"
+        showCLIRunner = true
+        if FileManager.default.fileExists(atPath: url.appendingPathComponent(".local-update.json").path) {
+            notice = "先检查上游；缺少集成基线或安全安装条件时会停止"
+        } else {
+            notice = "该目录尚未配置 .local-update.json；日常请直接使用 sync-upstream.sh 与 build.sh"
+        }
     }
 
     private func start(_ command: String, argument: String? = nil) {

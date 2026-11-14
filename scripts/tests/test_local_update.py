@@ -112,15 +112,15 @@ class LocalUpdateTests(unittest.TestCase):
     def install_fixture(self):
         self.installed = self.root / "Applications" / "AIME.app"
         for app, version in ((self.installed, "1"), (self.root / "new.app", "2")):
-            for relative, identifier in ((".", "app.zool.inputmethod.aime.voicepreview"),
-                    ("Contents/Applications/AIME Settings.app", "app.zool.aime.voicepreview.settings"),
-                    ("Contents/XPCServices/AIME Voice.xpc", "app.zool.aime.voicepreview.service")):
+            for relative, identifier in ((".", "app.zool.inputmethod.aime"),
+                    ("Contents/Applications/AIME Settings.app", "app.zool.aime.settings"),
+                    ("Contents/XPCServices/AIME Voice.xpc", "app.zool.aime.voice")):
                 contents = app / relative / "Contents"
                 (contents / "MacOS").mkdir(parents=True)
                 (contents / "MacOS/Fake").write_text("fixture-only executable")
                 info = dict(CFBundleIdentifier=identifier, CFBundleVersion=version, CFBundleExecutable="Fake")
                 if relative == ".":
-                    mode = "app.zool.inputmethod.aime.voicepreview.hans"
+                    mode = "app.zool.inputmethod.aime.hans"
                     info["ComponentInputModeDict"] = {"tsInputModeListKey": {mode: {"TISInputSourceID": mode}}}
                 (contents / "Info.plist").write_bytes(plistlib.dumps(info))
         hooks = self.root / "hooks"

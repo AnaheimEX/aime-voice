@@ -80,7 +80,7 @@ UI 可将 stdout 重定向到文件，避免 Settings 退出关闭管道。CLI �
     "repository": "https://github.com/zoolapp/aime.git",
     "releases": "https://api.github.com/repos/zoolapp/aime/releases?per_page=100"
   },
-  "installed_app": "/absolute/AIME Voice Preview.app",
+  "installed_app": "/absolute/AIME.app",
   "signing_identity": "固定证书的40位十六进制指纹",
   "hooks_dir": "/absolute/reviewed-local-hooks",
   "hooks_sha256": {
@@ -127,7 +127,7 @@ stdin 是单个 JSON 对象，stdout 必须是单个 JSON 对象，无日志前�
 - `launch` 使用 `installed_app`，不使用交换后已保存旧包的 `staged_app`；`action` 为 `start` 或 `restore`。
 - 本机数据位置、语音设置、学习词库和 API Key 不由 CLI 迁移或覆盖。数据不可逆迁移时，验证 hook 必须拒绝更新，不能虚假确认回退兼容。
 
-内置固定身份为宿主 `app.zool.inputmethod.aime.voicepreview`、Settings `app.zool.aime.voicepreview.settings`、XPC `app.zool.aime.voicepreview.service`，输入模式为 `app.zool.inputmethod.aime.voicepreview.hans`。三个 bundle 必须存在可用的内部可执行文件并使用同一个 CFBundleVersion。签名及完整数据路径检查仍由生产 verifier 落实，不能把文件结构检查当成签名验证。
+内置固定身份为宿主 `app.zool.inputmethod.aime`、Settings `app.zool.aime.settings`、XPC `app.zool.aime.voice`，输入模式为 `app.zool.inputmethod.aime.hans`。三个 bundle 必须存在可用的内部可执行文件并使用同一个 CFBundleVersion。签名及完整数据路径检查仍由生产 verifier 落实，不能把文件结构检查当成签名验证。
 
 ## Host 安装租约合同
 

@@ -148,9 +148,9 @@ def resolve_release(config, repository, target=None):
 
 
 HOOKS = ("verify-source", "build", "sign", "verify-app", "idle-gate", "launch")
-BUNDLES = ((".", "app.zool.inputmethod.aime.voicepreview"),
-           ("Contents/Applications/AIME Settings.app", "app.zool.aime.voicepreview.settings"),
-           ("Contents/XPCServices/AIME Voice.xpc", "app.zool.aime.voicepreview.service"))
+BUNDLES = ((".", "app.zool.inputmethod.aime"),
+           ("Contents/Applications/AIME Settings.app", "app.zool.aime.settings"),
+           ("Contents/XPCServices/AIME Voice.xpc", "app.zool.aime.voice"))
 
 
 def inspect_app(app):
@@ -163,10 +163,10 @@ def inspect_app(app):
                 "invalid_app", "All three App bundles must be inside staging.")
         info = plistlib.loads(info_path.read_bytes())
         if relative == ".":
-            mode = "app.zool.inputmethod.aime.voicepreview.hans"
+            mode = "app.zool.inputmethod.aime.hans"
             modes = info.get("ComponentInputModeDict", {}).get("tsInputModeListKey", {})
             require(set(modes) == {mode} and modes[mode].get("TISInputSourceID") == mode,
-                    "identity_mismatch", "Input source identity must remain the installed Voice Preview identity.")
+                    "identity_mismatch", "Input source identity must remain the installed AIME identity.")
         executable = info.get("CFBundleExecutable", "")
         require(info.get("CFBundleIdentifier") == identifier and executable and Path(executable).name == executable,
                 "identity_mismatch", "App bundle identity or executable changed.")
@@ -437,7 +437,7 @@ def execute(args, result, scratch):
             raise Failure("merge_conflict" if conflicts else "merge_failed", "Integration stopped; source and installed App were not changed.", conflicts=conflicts)
         installed = installation_config(config, source, state)
         context = dict(operation_id=operation.name, source_dir=str(repository),
-                       staged_app=str(repository / "build/LocalIntegration/AIME Voice Preview.app"),
+                       staged_app=str(repository / "build/LocalIntegration/AIME.app"),
                        installed_app=str(installed), signing_identity=config["signing_identity"],
                        upstream_commit=commit, version=version)
         result["phase"] = "verify-reference"
