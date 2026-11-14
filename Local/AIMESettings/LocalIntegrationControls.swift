@@ -7,9 +7,9 @@ struct LocalIntegrationControls: View {
     /// Set by project.local.yml; replaces the official updater controls in the version footer.
     static var replacesUpdater: Bool { Bundle.main.object(forInfoDictionaryKey: "AIMELocalIntegration") as? Bool == true }
 
-    private static let dailyCLICommand = "scripts/sync-upstream.sh && bash scripts/local-preview-build64/build.sh <build> --install"
+    private static let defaultRepository = "/Users/anaheim/Downloads/Project/aime-type4me-study/aime"
 
-    @AppStorage("localIntegrationRepository") private var repository = ""
+    @AppStorage("localIntegrationRepository") private var repository = defaultRepository
     @State private var showCLIRunner = false
     @State private var running = false
     @State private var notice = ""
@@ -22,8 +22,9 @@ struct LocalIntegrationControls: View {
             HStack(spacing: 12) {
                 Text("本机语音集成 · 已接管更新")
                     .font(.caption.weight(.semibold))
-                    .help("本机构建包含独立语音模块；已禁用官网自动安装包，避免覆盖丢失语音服务。日常请通过命令行同步上游并重建安装。")
-                Button("复制更新命令", action: copyCLICommand)
+                    .help("本机构建包含独立语音模块；已禁用官网自动安装包，避免覆盖丢失语音服务。点击右侧按钮可自动同步上游并重建安装。")
+                Button("检查并更新", action: quickUpdate).disabled(running)
+                if running { ProgressView().controlSize(.small) }
                 Button(showCLIRunner ? "收起配置" : "高级配置…") { showCLIRunner.toggle() }
             }
             .controlSize(.small)
@@ -51,10 +52,66 @@ struct LocalIntegrationControls: View {
         return FileManager.default.fileExists(atPath: URL(fileURLWithPath: repository).appendingPathComponent(".local-update.json").path)
     }
 
-    private func copyCLICommand() {
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(Self.dailyCLICommand, forType: .string)
-        notice = "已复制命令行更新指令（请在源码根目录运行，并将 <build> 替换为递增构建号）"
+    private func quickUpdate() {
+        guard !running else { return }
+        let repoPath = repository.isEmpty ? Self.defaultRepository : repository
+        let root = URL(fileURLWithPath: repoPath)
+        guard FileManager.default.fileExists(atPath: root.appendingPathComponent("scripts/sync-upstream.sh").path) else {
+            chooseRepository()
+            return
+        }
+        let script = """
+        set -euo pipefail
+        out=$(scripts/sync-upstream.sh 2>&1)
+        printf '%s\n' "$out"
+        if printf '%s\n' "$out" | grep -q "already contains origin/main"; then
+          echo "RESULT:UP_TO_DATE"
+          exit 0
+        fi
+        [ -z "$(git status --porcelain)" ] || git commit --no-edit -m "chore: sync upstream"
+        bash scripts/local-preview-build64/build.sh --install
+        git push personal main
+        echo "RESULT:UPDATED"
+        """
+        do {
+            let directory = FileManager.default.temporaryDirectory.appendingPathComponent("aime-local-update-ui", isDirectory: true)
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true,
+                                                   attributes: [.posixPermissions: 0o700])
+            let output = directory.appendingPathComponent(UUID().uuidString + ".log")
+            guard FileManager.default.createFile(atPath: output.path, contents: nil,
+                                                 attributes: [.posixPermissions: 0o600]) else { return }
+            let handle = try FileHandle(forWritingTo: output)
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/bin/bash")
+            process.arguments = ["-c", script]
+            process.currentDirectoryURL = root
+            var env = ProcessInfo.processInfo.environment
+            env["PATH"] = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+            process.environment = env
+            process.standardInput = FileHandle.nullDevice
+            process.standardOutput = handle
+            process.standardError = handle
+            try process.run()
+            try handle.close()
+            running = true
+            notice = "正在检查上游并同步更新…"
+            Task { @MainActor in
+                while process.isRunning { try? await Task.sleep(for: .milliseconds(250)) }
+                defer { try? FileManager.default.removeItem(at: output); running = false }
+                let text = (try? String(contentsOf: output, encoding: .utf8)) ?? ""
+                if text.contains("RESULT:UP_TO_DATE") {
+                    notice = "当前已是上游最新代码（无需重建）"
+                } else if text.contains("RESULT:UPDATED") {
+                    notice = "已完成上游同步、重建安装与备份"
+                } else {
+                    let lastLine = text.split(whereSeparator: \.isNewline).last.map(String.init)
+                    notice = lastLine ?? "本机更新失败（退出码 \(process.terminationStatus)）"
+                }
+            }
+        } catch {
+            running = false
+            notice = "无法启动本机更新：\(error.localizedDescription)"
+        }
     }
 
     private func chooseRepository() {
