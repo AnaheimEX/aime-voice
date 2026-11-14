@@ -180,6 +180,122 @@ private final class Connection: NSXPCConnection, @unchecked Sendable {
         precondition(modifierFeature.handle(NSEvent(cgEvent: optionDown)!, owner: modifierHost.owner) == .consumed)
         try await settle()
         modifierFeature.shutdown()
-        print("PASS VoiceFeature shortcut, commit, preparation-stop, duplicate readiness, stale event, focus rejection, ordinary-key cancellation, bare-modifier rewrite key")
+
+        // Secondary press during stopping must act as an escape hatch to cancel
+        let escapeHost = Host()
+        let escapeConn = Connection(machServiceName: "test.voice.escape")
+        let escapeFeature = VoiceFeature(host: escapeHost, settingsURL: url,
+            makeConnection: { escapeConn }, feedback: { _ in }, captureAnchor: { _ in nil })
+        escapeFeature.activate(escapeHost.owner)
+        precondition(escapeFeature.handle(key, owner: escapeHost.owner) == .consumed)
+        try await settle()
+        let escapeReq = escapeConn.service.requests.last!
+        escapeConn.send(VoiceEvent(sessionID: escapeReq.sessionID, kind: "recording"))
+        try await settle()
+        // First press to stop: enters transcribing
+        precondition(escapeFeature.handle(key, owner: escapeHost.owner) == .consumed)
+        precondition(!escapeFeature.isIdle)
+        // Second press while stopping: escape hatch cancels
+        precondition(escapeFeature.handle(key, owner: escapeHost.owner) == .consumed)
+        precondition(escapeFeature.isIdle)
+        precondition(escapeHost.effects.last == "status:语音任务已取消", "secondary press must cancel and show status")
+        escapeFeature.shutdown()
+
+        // Early stop race must not play start cue or spawn anchor task
+        var cueLog: [String] = []
+        let cueHost = Host()
+        let cueConn = Connection(machServiceName: "test.voice.cue")
+        let cueFeature = VoiceFeature(host: cueHost, settingsURL: url,
+            makeConnection: { cueConn }, feedback: { effect in
+                switch effect {
+                case .cue(let rec): cueLog.append("cue:\(rec)")
+                case .state(let st): cueLog.append("state:\(st)")
+                default: break
+                }
+            }, captureAnchor: { _ in fatalError("anchorTask should not spawn on early stop") })
+        cueFeature.activate(cueHost.owner)
+        precondition(cueFeature.handle(key, owner: cueHost.owner) == .consumed)
+        try await settle()
+        let cueReq = cueConn.service.requests.last!
+        // Stop before recording event arrives
+        precondition(cueFeature.handle(key, owner: cueHost.owner) == .consumed)
+        // Now recording event arrives late
+        cueConn.send(VoiceEvent(sessionID: cueReq.sessionID, kind: "recording"))
+        try await settle()
+        precondition(!cueLog.contains("cue:true"), "start cue must not play if user already stopped")
+        precondition(cueConn.service.stopped.contains(cueReq.sessionID), "stop must be forwarded to bridge")
+        cueConn.send(VoiceEvent(sessionID: cueReq.sessionID, kind: "transcribing"))
+        try await settle()
+        precondition(!cueLog.contains("cue:false"), "stop cue must not play if start cue was never played")
+        cueFeature.shutdown()
+
+        // Hold mode with compound shortcut: releasing key then releasing modifier must NOT cancel session
+        let holdHost = Host()
+        var holdSettings = settings
+        holdSettings.recordingGesture = "hold"
+        holdSettings.toggleShortcut = "Control+space"
+        let holdURL = root.appendingPathComponent("hold-settings.json")
+        try JSONEncoder().encode(holdSettings).write(to: holdURL)
+        let holdConn = Connection(machServiceName: "test.voice.hold")
+        let holdFeature = VoiceFeature(host: holdHost, settingsURL: holdURL,
+            makeConnection: { holdConn }, feedback: { _ in }, captureAnchor: { _ in nil })
+        holdFeature.activate(holdHost.owner)
+        // Press Control+Space down
+        let spaceDown = CGEvent(source: nil)!
+        spaceDown.type = .keyDown
+        spaceDown.flags = .maskControl
+        spaceDown.setIntegerValueField(.keyboardEventKeycode, value: 49) // space
+        precondition(holdFeature.handle(NSEvent(cgEvent: spaceDown)!, owner: holdHost.owner) == .consumed)
+        try await settle()
+        let holdReq = holdConn.service.requests.last!
+        holdConn.send(VoiceEvent(sessionID: holdReq.sessionID, kind: "recording"))
+        try await settle()
+        // Release space first (keyUp)
+        let spaceUp = CGEvent(source: nil)!
+        spaceUp.type = .keyUp
+        spaceUp.flags = .maskControl
+        spaceUp.setIntegerValueField(.keyboardEventKeycode, value: 49)
+        _ = holdFeature.handle(NSEvent(cgEvent: spaceUp)!, owner: holdHost.owner)
+        precondition(!holdFeature.isIdle, "session should be stopping/transcribing, not idle")
+        precondition(holdHost.effects.last != "status:语音任务已取消", "releasing key must not cancel voice")
+        // Now release Control (flagsChanged with missing control modifier)
+        let ctrlUp = CGEvent(source: nil)!
+        ctrlUp.type = .flagsChanged
+        ctrlUp.flags = []
+        ctrlUp.setIntegerValueField(.keyboardEventKeycode, value: 59)
+        _ = holdFeature.handle(NSEvent(cgEvent: ctrlUp)!, owner: holdHost.owner)
+        precondition(!holdFeature.isIdle, "session should still be transcribing, not cancelled on modifier release")
+        precondition(holdHost.effects.last != "status:语音任务已取消", "releasing modifier must not cancel voice")
+        // Pressing shortcut again while stopping acts as escape hatch to cancel
+        precondition(holdFeature.handle(NSEvent(cgEvent: spaceDown)!, owner: holdHost.owner) == .consumed)
+        precondition(holdFeature.isIdle, "pressing shortcut again during hold stopping must cancel")
+        precondition(holdHost.effects.last == "status:语音任务已取消", "escape hatch must show cancelled status")
+        holdFeature.shutdown()
+
+        // Missed modifier key-up must not permanently desynchronize state or swallow subsequent presses
+        let resyncHost = Host()
+        var ctrlSettings = settings
+        ctrlSettings.rewriteShortcut = "Control_R"
+        let ctrlURL = root.appendingPathComponent("ctrl-settings.json")
+        try JSONEncoder().encode(ctrlSettings).write(to: ctrlURL)
+        let resyncFeature = VoiceFeature(host: resyncHost, settingsURL: ctrlURL,
+            makeConnection: { Connection(machServiceName: "test.voice.ctrl") }, feedback: { _ in }, captureAnchor: { _ in nil })
+        resyncFeature.activate(resyncHost.owner)
+        let ctrlDown = CGEvent(source: nil)!
+        ctrlDown.type = .flagsChanged
+        ctrlDown.flags = .maskControl
+        ctrlDown.setIntegerValueField(.keyboardEventKeycode, value: 62)
+        precondition(resyncFeature.handle(NSEvent(cgEvent: ctrlDown)!, owner: resyncHost.owner) == .consumed)
+        // Key-up missed! Another event arrives with Control flag cleared
+        let otherEvent = CGEvent(source: nil)!
+        otherEvent.type = .flagsChanged
+        otherEvent.flags = []
+        otherEvent.setIntegerValueField(.keyboardEventKeycode, value: 58)
+        _ = resyncFeature.handle(NSEvent(cgEvent: otherEvent)!, owner: resyncHost.owner)
+        // Now Control_R is pressed down again; it must NOT be swallowed
+        precondition(resyncFeature.handle(NSEvent(cgEvent: ctrlDown)!, owner: resyncHost.owner) == .consumed, "subsequent modifier press must not be swallowed after missed key-up")
+        resyncFeature.shutdown()
+
+        print("PASS VoiceFeature shortcut, commit, preparation-stop, duplicate readiness, stale event, focus rejection, ordinary-key cancellation, bare-modifier rewrite key, escape hatch, early stop cue, modifier resync")
     }
 }

@@ -1,7 +1,7 @@
 public import Foundation
 
 public enum VoiceTranscriptionError: LocalizedError, Sendable {
-    case invalidConfiguration, emptyRecording, tooLong, invalidResponse, httpStatus(Int), emptyTranscript
+    case invalidConfiguration, emptyRecording, tooLong, invalidResponse, httpStatus(Int), emptyTranscript, timedOut
 
     public var errorDescription: String? {
         switch self {
@@ -11,6 +11,7 @@ public enum VoiceTranscriptionError: LocalizedError, Sendable {
         case .invalidResponse: "语音识别服务返回了无法解析的响应"
         case .httpStatus(let status): "语音识别请求失败（HTTP \(status)）"
         case .emptyTranscript: "语音识别服务没有返回文字"
+        case .timedOut: "等待语音识别最终结果超时，请重试"
         }
     }
 }
@@ -71,7 +72,13 @@ public struct VoiceTranscriber: Sendable {
         guard !key.contains("\r"), !key.contains("\n") else { throw VoiceTranscriptionError.invalidConfiguration }
         if !key.isEmpty { request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization") }
         request.httpBody = body
-        let (data, response) = try await Self.session.data(for: request)
+        let data: Data
+        let response: URLResponse
+        do {
+            (data, response) = try await Self.session.data(for: request)
+        } catch let error as URLError where error.code == .timedOut {
+            throw VoiceTranscriptionError.timedOut
+        }
         try Task.checkCancellation()
         guard let http = response as? HTTPURLResponse else { throw VoiceTranscriptionError.invalidResponse }
         guard (200..<300).contains(http.statusCode) else {
@@ -129,7 +136,13 @@ public struct VoiceTranscriber: Sendable {
         let request = try volcFlashRequest(audio, endpoint: endpoint, hotwords: hotwords)
         let session = URLSession(configuration: .ephemeral, delegate: VoiceASRNoRedirect(), delegateQueue: nil)
         defer { session.invalidateAndCancel() }
-        let (data, response) = try await session.data(for: request)
+        let data: Data
+        let response: URLResponse
+        do {
+            (data, response) = try await session.data(for: request)
+        } catch let error as URLError where error.code == .timedOut {
+            throw VoiceRecognitionError.timedOut
+        }
         try Task.checkCancellation()
         guard let http = response as? HTTPURLResponse else { throw VoiceRecognitionError.invalidResponse }
         guard (200..<300).contains(http.statusCode) else { throw VoiceRecognitionError.speechHTTPStatus(http.statusCode) }

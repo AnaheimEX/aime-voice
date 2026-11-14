@@ -148,17 +148,20 @@ final class VoiceServiceBridge: NSObject {
     private static let logger = Logger(subsystem: "app.zool.aime.voice", category: "latency")
     private let channel: VoiceServiceChannel
     private let startTimeout: Duration
+    private let stopTimeout: Duration
     private var sessionID: String?
     private var pendingStart: CheckedContinuation<Void, any Error>?
     private var pendingID: UUID?
     private var startupID: UUID?
     private var timeoutTask: Task<Void, Never>?
+    private var stopWatchdogTask: Task<Void, Never>?
     private var startedAt: ContinuousClock.Instant?
     var onEvent: ((VoiceEvent) -> Void)?
 
-    init(channel: VoiceServiceChannel = .shared, startTimeout: Duration = .seconds(3)) {
+    init(channel: VoiceServiceChannel = .shared, startTimeout: Duration = .seconds(3), stopTimeout: Duration = .seconds(180)) {
         self.channel = channel
         self.startTimeout = startTimeout
+        self.stopTimeout = stopTimeout
         super.init()
     }
 
@@ -226,6 +229,7 @@ final class VoiceServiceBridge: NSObject {
     }
 
     private func failStart(_ id: UUID, error: any Error) {
+        disarmStopWatchdog()
         guard startupID == id else { return }
         let accepted = pendingStart == nil
         let failedSessionID = sessionID
@@ -241,9 +245,30 @@ final class VoiceServiceBridge: NSObject {
     func stop() {
         guard let sessionID else { return }
         channel.stop(for: self, sessionID: sessionID)
+        armStopWatchdog(for: sessionID)
+    }
+
+    private func armStopWatchdog(for sessionID: String) {
+        stopWatchdogTask?.cancel()
+        stopWatchdogTask = Task { @MainActor [weak self, stopTimeout] in
+            do { try await Task.sleep(for: stopTimeout) } catch { return }
+            guard let self, self.sessionID == sessionID else { return }
+            Self.logger.notice("stage=stopWatchdogTimedOut session=\(sessionID, privacy: .public)")
+            self.stopWatchdogTask = nil
+            self.channel.discard(for: self)
+            self.sessionID = nil
+            self.startedAt = nil
+            self.onEvent?(VoiceEvent(sessionID: sessionID, kind: "error", text: "语音转写超时，请重试"))
+        }
+    }
+
+    private func disarmStopWatchdog() {
+        stopWatchdogTask?.cancel()
+        stopWatchdogTask = nil
     }
 
     fileprivate func serviceDisconnected() {
+        disarmStopWatchdog()
         guard let sessionID else { return }
         self.sessionID = nil
         startedAt = nil
@@ -252,6 +277,7 @@ final class VoiceServiceBridge: NSObject {
     }
 
     func cancel() {
+        disarmStopWatchdog()
         if let sessionID { channel.cancel(for: self, sessionID: sessionID) }
         sessionID = nil
         startedAt = nil
@@ -261,6 +287,9 @@ final class VoiceServiceBridge: NSObject {
 
     fileprivate func receive(_ event: VoiceEvent) {
         guard sessionID == event.sessionID else { return }
+        if ["completed", "error", "cancelled"].contains(event.kind) {
+            disarmStopWatchdog()
+        }
         if event.kind == "recording", let startedAt {
             let elapsed = startedAt.duration(to: .now)
             let ms = Int(elapsed.components.seconds * 1000 + elapsed.components.attoseconds / 1_000_000_000_000_000)

@@ -20,7 +20,12 @@ enum MiMoSpeechTranscription {
             "asr_options": ["language": ["zh", "en"].contains(language) ? language : "auto"],
             "stream": false
         ])
-        let data = try await VoiceHTTP.request(endpoint: endpoint, path: "chat/completions", body: body, timeout: 120)
+        let data: Data
+        do {
+            data = try await VoiceHTTP.request(endpoint: endpoint, path: "chat/completions", body: body, timeout: 120)
+        } catch let error as URLError where error.code == .timedOut {
+            throw VoiceTranscriptionError.timedOut
+        }
         try Task.checkCancellation()
         struct Response: Decodable {
             struct Choice: Decodable {

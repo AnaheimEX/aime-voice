@@ -54,7 +54,13 @@ enum FishSpeechTranscription {
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.httpBody = body
         try Task.checkCancellation()
-        let (data, response) = try await session.data(for: request)
+        let data: Data
+        let response: URLResponse
+        do {
+            (data, response) = try await session.data(for: request)
+        } catch let error as URLError where error.code == .timedOut {
+            throw VoiceTranscriptionError.timedOut
+        }
         try Task.checkCancellation()
         guard let response = response as? HTTPURLResponse else { throw VoiceTranscriptionError.invalidResponse }
         guard (200..<300).contains(response.statusCode) else { throw Failure.http(response.statusCode) }

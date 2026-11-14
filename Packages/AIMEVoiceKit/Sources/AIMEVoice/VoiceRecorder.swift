@@ -214,6 +214,7 @@ final class PCMAccumulator: @unchecked Sendable {
         self.target = target
         self.converter = converter
         self.onPCM = onPCM
+        pcm.reserveCapacity(320_000)
     }
 
     func append(_ buffer: AVAudioPCMBuffer) -> Double? {
@@ -254,12 +255,13 @@ final class PCMAccumulator: @unchecked Sendable {
         let chunk = Data(bytes: samples, count: count * MemoryLayout<Int16>.size)
         pcm.append(chunk)
         onPCM(chunk)
-        var sum = 0.0
+        var sumSquares: Int64 = 0
         for index in 0..<count {
-            let sample = Double(samples[index]) / 32_768
-            sum += sample * sample
+            let s = Int64(samples[index])
+            sumSquares += s * s
         }
-        return min(1, sqrt(sum / Double(count)) * 4)
+        let meanSquare = Double(sumSquares) / (Double(count) * 1_073_741_824.0)
+        return min(1, sqrt(meanSquare) * 4)
     }
 
     var captureFailure: VoiceCaptureError? { lock.withLock { failure } }

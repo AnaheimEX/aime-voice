@@ -122,8 +122,13 @@ public final class VoiceFeature {
         mutating func modifierTransition(_ event: NSEvent) -> Bool? {
             guard VoiceShortcutConfiguration.modifierName(keyCode: event.keyCode) != nil else { return nil }
             let down = VoiceShortcutConfiguration.modifierIsPressed(keyCode: event.keyCode, flags: event.modifierFlags.rawValue)
+            // Synchronize with event.modifierFlags so missed releases never leave a modifier stuck down.
+            pressedModifiers = pressedModifiers.filter {
+                VoiceShortcutConfiguration.modifierIsPressed(keyCode: $0, flags: event.modifierFlags.rawValue)
+            }
             if down { return pressedModifiers.insert(event.keyCode).inserted ? true : nil }
-            return pressedModifiers.remove(event.keyCode) != nil ? false : nil
+            let removed = pressedModifiers.remove(event.keyCode) != nil
+            return (removed || isConsumed(event.keyCode)) ? false : nil
         }
 
         mutating func consumeDown(_ keyCode: UInt16) { consumedKeys.insert(keyCode) }
@@ -154,6 +159,7 @@ public final class VoiceFeature {
         var task: Task<Void, Never>?
         var stopping = false
         var recording = false
+        var stopped = false
 
         init(bridge: VoiceServiceBridge, client: any IMKTextInput, settings: VoiceSettings, recordingKeyCode: UInt16,
              rewriteSelection: VoiceRewriteSelection? = nil, origin: VoiceDictationOrigin? = nil,
@@ -217,6 +223,12 @@ public final class VoiceFeature {
         let toggle = voice?.toggleShortcut ?? shortcuts.toggleShortcut
         let cancel = voice?.cancelShortcut ?? shortcuts.cancelShortcut
         let name = voiceKeyName(event)
+        if let voice, voice.stopping, (name == toggle || name == shortcuts.toggleShortcut || name == shortcuts.rewriteShortcut) {
+            voiceKeyState.consumeDown(event.keyCode)
+            cancelVoice()
+            showStatus("语音任务已取消")
+            return true
+        }
         if name == shortcuts.rewriteShortcut, voice == nil, shortcuts.enabled {
             if voicePreparation != nil { cancelVoice(); return true }
             voiceKeyState.consumeDown(event.keyCode)
@@ -225,12 +237,17 @@ public final class VoiceFeature {
             return true
         }
         if name == toggle, voice != nil || shortcuts.enabled {
-            if voicePreparation != nil { cancelVoice() }
+            if voicePreparation != nil { cancelVoice(); return true }
             voiceLatencyLogger.notice("Voice shortcut matched keyCode=\(event.keyCode, privacy: .public) flags=\(event.modifierFlags.rawValue, privacy: .public)")
             voiceKeyState.consumeDown(event.keyCode)
             if event.type == .keyDown, event.isARepeat { return true }
             if let voice {
-                if voice.recordingGesture != "hold" { stopVoiceRecording(voice) }
+                if voice.stopping {
+                    cancelVoice()
+                    showStatus("语音任务已取消")
+                } else if voice.recordingGesture != "hold" {
+                    stopVoiceRecording(voice)
+                }
             } else { startVoice(client: client, recordingKeyCode: event.keyCode) }
             return true
         }
@@ -248,7 +265,10 @@ public final class VoiceFeature {
     private func stopVoiceRecording(_ session: VoiceInputSession) {
         guard !session.stopping else { return }
         session.stopping = true
-        if session.recording { session.bridge.stop() }
+        if session.recording {
+            session.stopped = true
+            session.bridge.stop()
+        }
         feedback(.state(.transcribing))
     }
 
@@ -333,7 +353,12 @@ public final class VoiceFeature {
             guard let self, let session, self.voice === session else { return }
             switch event.kind {
             case "recording":
-                guard !session.recording else { return }
+                guard !session.recording, !session.stopped else { return }
+                if session.stopping {
+                    session.stopped = true
+                    session.bridge.stop()
+                    return
+                }
                 session.recording = true
                 feedback(.cue(recording: true))
                 if !session.isRewrite, AXIsProcessTrusted() {
@@ -347,10 +372,7 @@ public final class VoiceFeature {
                         }
                     }
                 }
-                if session.stopping { session.bridge.stop() }
-                else {
-                    feedback(.state(.recording))
-                }
+                feedback(.state(.recording))
             case "partial":
                 // Recognition hypotheses stay internal; only the final polished result is committed.
                 break
@@ -405,16 +427,19 @@ public final class VoiceFeature {
     }
 
     private func commitVoice(_ text: String, session: VoiceInputSession) async {
+        guard !Task.isCancelled, voice === session else { return }
         let commitStarted = ContinuousClock.now
         defer { if voice === session { cancelVoice() } }
         // The cleanup above restores the candidate panel, which would hide a message shown just before it.
         // Release the session first on a rejection; the message then hides itself and restores the panel.
         func reject(_ message: String) {
-            if voice === session { cancelVoice(restorePanel: false) }
+            guard voice === session else { return }
+            cancelVoice(restorePanel: false)
             showStatus(message)
         }
         if session.rewriteSelection == nil { await session.anchorTask?.value }
-        guard !Task.isCancelled, voice === session, !IsSecureEventInputEnabled(),
+        if Task.isCancelled || voice !== session { return }
+        guard !IsSecureEventInputEnabled(),
               let snapshot, snapshot.canCommit else {
             voiceLatencyLogger.notice("commitRejected=inactive_or_composing")
             reject("输入位置已变化，语音结果未写入")
@@ -430,11 +455,19 @@ public final class VoiceFeature {
         if let selection = session.rewriteSelection { rejection = await selection.insert(text, into: current, allowEmpty: text.isEmpty) }
         else if let imkSelection = session.imkRewriteSelection { rejection = await imkSelection.insert(text, into: current, allowEmpty: text.isEmpty) }
         else { rejection = session.target.insert(text, into: current) }
+        if Task.isCancelled || voice !== session { return }
+        let appID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? current.bundleIdentifier() ?? "?"
         if let rejection {
-            voiceLatencyLogger.notice("commitRejected=\(rejection.rawValue, privacy: .public) app=\(current.bundleIdentifier() ?? "?", privacy: .public)")
-            reject(session.rewriteSelection?.preparationFailureMessage
-                   ?? session.imkRewriteSelection?.preparationFailureMessage
-                   ?? "输入位置已变化，语音结果未写入")
+            voiceLatencyLogger.notice("commitRejected=\(rejection.rawValue, privacy: .public) app=\(appID, privacy: .public)")
+            let message: String
+            if rejection == .emptyResult, !session.isRewrite {
+                message = "未识别到有效内容"
+            } else {
+                message = session.rewriteSelection?.preparationFailureMessage
+                    ?? session.imkRewriteSelection?.preparationFailureMessage
+                    ?? "输入位置已变化，语音结果未写入"
+            }
+            reject(message)
             return
         }
         if let selection = session.rewriteSelection {
@@ -463,7 +496,7 @@ public final class VoiceFeature {
         }
         let elapsed = commitStarted.duration(to: .now)
         let milliseconds = Int(elapsed.components.seconds * 1000 + elapsed.components.attoseconds / 1_000_000_000_000_000)
-        voiceLatencyLogger.notice("commitMs=\(milliseconds) app=\(current.bundleIdentifier() ?? "?", privacy: .public)")
+        voiceLatencyLogger.notice("commitMs=\(milliseconds) app=\(appID, privacy: .public)")
         if !session.isRewrite, let processing = session.completion.processing {
             VoicePolishObservation.recordAfterCommit(transcript: session.transcript, committed: text,
                                                     settings: session.settings, processing: processing)

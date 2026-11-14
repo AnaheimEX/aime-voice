@@ -239,6 +239,33 @@ private final class Connection: NSXPCConnection, @unchecked Sendable {
         try await second.start(request("after-idle-interruption"))
         second.cancel()
         check(connections.count == 6, "idle service interruption must recreate on next start")
+
+        // Stop watchdog timeout: if server hangs after stop, bridge must time out and report error
+        var stopWatchdogErrors: [String] = []
+        let stopWatchdogBridge = VoiceServiceBridge(channel: channel, stopTimeout: .milliseconds(40))
+        stopWatchdogBridge.onEvent = { if $0.kind == "error" { stopWatchdogErrors.append($0.text) } }
+        try await stopWatchdogBridge.start(request("stop-watchdog"))
+        channel.receive(try JSONEncoder().encode(VoiceEvent(sessionID: "stop-watchdog", kind: "recording")))
+        await settle()
+        stopWatchdogBridge.stop()
+        try await Task.sleep(for: .milliseconds(70))
+        check(stopWatchdogErrors == ["语音转写超时，请重试"], "stop watchdog must emit error when server hangs after stop")
+        check(connections[5].invalidations == 1, "stop watchdog must discard hung connection")
+
+        // Terminal event before timeout disarms stop watchdog
+        var disarmedErrors: [String] = []
+        let disarmedBridge = VoiceServiceBridge(channel: channel, stopTimeout: .milliseconds(50))
+        disarmedBridge.onEvent = { if $0.kind == "error" { disarmedErrors.append($0.text) } }
+        try await disarmedBridge.start(request("disarm-stop-watchdog"))
+        channel.receive(try JSONEncoder().encode(VoiceEvent(sessionID: "disarm-stop-watchdog", kind: "recording")))
+        await settle()
+        disarmedBridge.stop()
+        channel.receive(try JSONEncoder().encode(VoiceEvent(sessionID: "disarm-stop-watchdog", kind: "completed", text: "ok")))
+        await settle()
+        try await Task.sleep(for: .milliseconds(70))
+        check(disarmedErrors.isEmpty, "completed event must disarm stop watchdog")
+        disarmedBridge.cancel()
+
         print("PASS \(checks) bridge lifecycle checks; no service or microphone launched")
     }
 }
